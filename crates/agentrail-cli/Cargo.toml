@@ -1,0 +1,22 @@
+[package]
+name = "agentrail-cli"
+description = "CLI binary for AgentRail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "agentrail"
+path = "src/main.rs"
+
+[dependencies]
+agentrail-core = { path = "../agentrail-core" }
+agentrail-store = { path = "../agentrail-store" }
+agentrail-exec = { path = "../agentrail-exec" }
+agentrail-validate = { path = "../agentrail-validate" }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

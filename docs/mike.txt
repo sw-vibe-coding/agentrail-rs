@@ -1,0 +1,48 @@
+What's set up
+
+  agentrail-rs/
+  ├── Cargo.toml              # workspace root
+  ├── CLAUDE.md               # project context for future agents
+  ├── .gitignore
+  ├── docs/research.txt       # copied from parent
+  └── crates/
+      ├── agentrail-core/     # domain model: saga, step (+roles), trajectory, handoff packet, errors
+      ├── agentrail-store/    # persistence: saga, step, session snapshots, trajectory storage
+      ├── agentrail-cli/      # stub binary
+      ├── agentrail-exec/     # stub (deterministic executors)
+      └── agentrail-validate/ # stub (validators)
+
+  What was reused from avoid-compaction
+
+  - Saga/step model — carried forward with extensions (StepRole, JobSpec, packet_file)
+  - TOML persistence — saga.rs/step.rs adapted (.agentrail/ instead of .avoid-compaction/)
+  - Session snapshots — session.rs copied nearly verbatim (solid code)
+  - Error handling — same thiserror pattern, added JobFailed/ValidationFailed/Json variants
+  - Utilities — read_input, truncate, timestamps
+
+  What's new (not in avoid-compaction)
+
+  - StepRole enum: Meta / Production / Deterministic / Validation / Legacy
+  - JobSpec for deterministic steps
+  - Trajectory struct: task_type / state / action / result / reward
+  - HandoffPacket + OutputContract for meta→production handoffs
+  - trajectory.rs store: save/retrieve/filter by task type and reward
+  - Workspace layout (5 crates vs single crate)
+
+  How to build this — my recommendation
+
+  Start with Phase 0 (walking skeleton): wire up the CLI commands init, status, next, complete in agentrail-cli by calling into
+  agentrail-store. This is mostly porting the avoid-compaction command logic with the new types. TDD with the same tempdir integration
+  test pattern.
+
+  Then Phase 1: pick one real deterministic job kind (GenerateTts), implement it in agentrail-exec with a validator in
+  agentrail-validate, and wire run-next to auto-execute deterministic steps.
+
+  Questions for you
+
+  1. Do you want me to proceed with Phase 0 now (wire up CLI commands), or do you want to review/adjust the scaffolding first?
+  2. GitHub remote — should I add the origin and push this scaffolding, or will you handle that since you already set up the repo?
+  3. The Cargo.lock is in .gitignore — for a binary/CLI project, you may want to track it. Should I remove it from gitignore?
+
+✻ Sautéed for 3m 58s
+
