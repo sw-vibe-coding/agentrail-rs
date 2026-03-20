@@ -9,6 +9,7 @@ pub struct CompleteArgs<'a> {
     pub next_prompt: Option<&'a str>,
     pub next_context: Vec<String>,
     pub next_role: &'a str,
+    pub next_task_type: Option<&'a str>,
     pub planned: Vec<String>,
     pub done: bool,
 }
@@ -78,15 +79,16 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         let role = parse_role(args.next_role);
 
         let description = agentrail_core::truncate(&prompt, 80);
-        step::create_step(
-            &saga_dir,
-            next_number,
+        step::create_step(&step::CreateStepParams {
+            saga_dir: &saga_dir,
+            number: next_number,
             slug,
-            &prompt,
-            &description,
+            prompt: &prompt,
+            description: &description,
             role,
-            &args.next_context,
-        )?;
+            context_files: &args.next_context,
+            task_type: args.next_task_type,
+        })?;
 
         config.current_step = next_number;
         saga::save_saga(saga_path, &config)?;
@@ -102,7 +104,16 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
             Some((s, d)) => (s.trim(), d.trim()),
             None => (planned.trim(), planned.trim()),
         };
-        step::create_step(&saga_dir, number, slug, "", desc, StepRole::Legacy, &[])?;
+        step::create_step(&step::CreateStepParams {
+            saga_dir: &saga_dir,
+            number,
+            slug,
+            prompt: "",
+            description: desc,
+            role: StepRole::Legacy,
+            context_files: &[],
+            task_type: None,
+        })?;
         println!("Planned step {:03}-{}.", number, slug);
     }
 

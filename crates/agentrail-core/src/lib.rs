@@ -55,6 +55,9 @@ pub struct StepConfig {
     /// For agentic steps: the handoff packet path
     #[serde(default)]
     pub packet_file: Option<String>,
+    /// Task type key for skill/experience retrieval (e.g., "tts", "ffmpeg-concat")
+    #[serde(default)]
+    pub task_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

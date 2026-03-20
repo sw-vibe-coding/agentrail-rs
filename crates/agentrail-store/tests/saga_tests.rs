@@ -1,5 +1,6 @@
 use agentrail_core::{SagaStatus, StepRole, StepStatus};
 use agentrail_store::{saga, step};
+use step::CreateStepParams;
 use tempfile::tempdir;
 
 #[test]
@@ -72,15 +73,16 @@ fn create_step_with_role() {
     saga::init_saga(tmp.path(), "s", "p").unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
-    let dir = step::create_step(
-        &saga_dir,
-        1,
-        "my-step",
-        "prompt text",
-        "description",
-        StepRole::Production,
-        &[],
-    )
+    let dir = step::create_step(&CreateStepParams {
+        saga_dir: &saga_dir,
+        number: 1,
+        slug: "my-step",
+        prompt: "prompt text",
+        description: "description",
+        role: StepRole::Production,
+        context_files: &[],
+        task_type: None,
+    })
     .unwrap();
 
     assert!(dir.exists());
@@ -89,9 +91,33 @@ fn create_step_with_role() {
     assert_eq!(config.status, StepStatus::Pending);
     assert_eq!(config.number, 1);
     assert_eq!(config.slug, "my-step");
+    assert!(config.task_type.is_none());
 
     let prompt = std::fs::read_to_string(dir.join("prompt.md")).unwrap();
     assert_eq!(prompt, "prompt text");
+}
+
+#[test]
+fn create_step_with_task_type() {
+    let tmp = tempdir().unwrap();
+    saga::init_saga(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    let dir = step::create_step(&CreateStepParams {
+        saga_dir: &saga_dir,
+        number: 1,
+        slug: "gen-audio",
+        prompt: "Generate TTS",
+        description: "TTS generation",
+        role: StepRole::Deterministic,
+        context_files: &[],
+        task_type: Some("tts"),
+    })
+    .unwrap();
+
+    let config = step::load_step(&dir).unwrap();
+    assert_eq!(config.task_type, Some("tts".to_string()));
+    assert_eq!(config.role, StepRole::Deterministic);
 }
 
 #[test]
@@ -101,7 +127,17 @@ fn transition_step_valid_transitions() {
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Pending -> InProgress -> Completed
-    let dir = step::create_step(&saga_dir, 1, "a", "", "", StepRole::Legacy, &[]).unwrap();
+    let dir = step::create_step(&CreateStepParams {
+        saga_dir: &saga_dir,
+        number: 1,
+        slug: "a",
+        prompt: "",
+        description: "",
+        role: StepRole::Legacy,
+        context_files: &[],
+        task_type: None,
+    })
+    .unwrap();
     let mut config = step::load_step(&dir).unwrap();
     step::transition_step(&mut config, StepStatus::InProgress).unwrap();
     assert_eq!(config.status, StepStatus::InProgress);
@@ -110,7 +146,17 @@ fn transition_step_valid_transitions() {
     assert!(config.completed_at.is_some());
 
     // Pending -> InProgress -> Blocked
-    let dir2 = step::create_step(&saga_dir, 2, "b", "", "", StepRole::Legacy, &[]).unwrap();
+    let dir2 = step::create_step(&CreateStepParams {
+        saga_dir: &saga_dir,
+        number: 2,
+        slug: "b",
+        prompt: "",
+        description: "",
+        role: StepRole::Legacy,
+        context_files: &[],
+        task_type: None,
+    })
+    .unwrap();
     let mut config2 = step::load_step(&dir2).unwrap();
     step::transition_step(&mut config2, StepStatus::InProgress).unwrap();
     step::transition_step(&mut config2, StepStatus::Blocked).unwrap();
@@ -123,7 +169,17 @@ fn transition_step_invalid_transitions() {
     saga::init_saga(tmp.path(), "s", "p").unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
-    let dir = step::create_step(&saga_dir, 1, "a", "", "", StepRole::Legacy, &[]).unwrap();
+    let dir = step::create_step(&CreateStepParams {
+        saga_dir: &saga_dir,
+        number: 1,
+        slug: "a",
+        prompt: "",
+        description: "",
+        role: StepRole::Legacy,
+        context_files: &[],
+        task_type: None,
+    })
+    .unwrap();
     let mut config = step::load_step(&dir).unwrap();
 
     // Pending -> Completed (invalid)
@@ -144,9 +200,23 @@ fn list_steps_sorted_by_number() {
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Create out of order
-    step::create_step(&saga_dir, 3, "c", "", "", StepRole::Validation, &[]).unwrap();
-    step::create_step(&saga_dir, 1, "a", "", "", StepRole::Meta, &[]).unwrap();
-    step::create_step(&saga_dir, 2, "b", "", "", StepRole::Production, &[]).unwrap();
+    for (num, slug, role) in [
+        (3u32, "c", StepRole::Validation),
+        (1, "a", StepRole::Meta),
+        (2, "b", StepRole::Production),
+    ] {
+        step::create_step(&CreateStepParams {
+            saga_dir: &saga_dir,
+            number: num,
+            slug,
+            prompt: "",
+            description: "",
+            role,
+            context_files: &[],
+            task_type: None,
+        })
+        .unwrap();
+    }
 
     let steps = step::list_steps(&saga_dir).unwrap();
     assert_eq!(steps.len(), 3);

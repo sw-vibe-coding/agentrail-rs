@@ -43,15 +43,26 @@ pub fn save_step(step_dir: &Path, config: &StepConfig) -> Result<()> {
     Ok(())
 }
 
-pub fn create_step(
-    saga_dir: &Path,
-    number: u32,
-    slug: &str,
-    prompt: &str,
-    description: &str,
-    role: StepRole,
-    context_files: &[String],
-) -> Result<PathBuf> {
+pub struct CreateStepParams<'a> {
+    pub saga_dir: &'a Path,
+    pub number: u32,
+    pub slug: &'a str,
+    pub prompt: &'a str,
+    pub description: &'a str,
+    pub role: StepRole,
+    pub context_files: &'a [String],
+    pub task_type: Option<&'a str>,
+}
+
+pub fn create_step(p: &CreateStepParams<'_>) -> Result<PathBuf> {
+    let saga_dir = p.saga_dir;
+    let number = p.number;
+    let slug = p.slug;
+    let prompt = p.prompt;
+    let description = p.description;
+    let role = p.role.clone();
+    let context_files = p.context_files;
+    let task_type = p.task_type;
     let dir = step_dir(saga_dir, number, slug);
     std::fs::create_dir_all(&dir)?;
 
@@ -67,6 +78,7 @@ pub fn create_step(
         transcript_file: None,
         job_spec: None,
         packet_file: None,
+        task_type: task_type.map(|s| s.to_string()),
     };
 
     save_step(&dir, &config)?;

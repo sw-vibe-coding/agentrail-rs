@@ -1,6 +1,6 @@
 use agentrail_cli::commands::{abort, begin, complete, history, init, next, plan, status};
-use agentrail_core::SagaStatus;
-use agentrail_store::{saga, step};
+use agentrail_core::{SagaStatus, Trajectory};
+use agentrail_store::{saga, step, trajectory};
 use tempfile::tempdir;
 
 #[test]
@@ -69,6 +69,7 @@ fn full_workflow() {
         next_prompt: Some("Write the code"),
         next_context: vec![],
         next_role: "production",
+        next_task_type: None,
         planned: vec![],
         done: false,
     };
@@ -96,6 +97,7 @@ fn full_workflow() {
         next_prompt: None,
         next_context: vec![],
         next_role: "legacy",
+        next_task_type: None,
         planned: vec![],
         done: true,
     };
@@ -135,6 +137,7 @@ fn history_shows_steps() {
         next_prompt: Some("do it"),
         next_context: vec![],
         next_role: "meta",
+        next_task_type: None,
         planned: vec![],
         done: false,
     };
@@ -154,6 +157,7 @@ fn abort_blocks_step() {
         next_prompt: Some("do it"),
         next_context: vec![],
         next_role: "production",
+        next_task_type: None,
         planned: vec![],
         done: false,
     };
@@ -178,6 +182,7 @@ fn complete_with_planned_steps() {
         next_prompt: Some("first"),
         next_context: vec![],
         next_role: "meta",
+        next_task_type: None,
         planned: vec![
             "step2: do second thing".to_string(),
             "step3: do third thing".to_string(),
@@ -192,4 +197,44 @@ fn complete_with_planned_steps() {
     assert_eq!(steps[0].1.slug, "step1");
     assert_eq!(steps[1].1.slug, "step2");
     assert_eq!(steps[2].1.slug, "step3");
+}
+
+#[test]
+fn complete_with_task_type_and_next_shows_trajectories() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Pre-populate trajectories for the "tts" task type
+    let t = Trajectory {
+        task_type: "tts".to_string(),
+        state: serde_json::json!({"script": "hello"}),
+        action: "gradio_client".to_string(),
+        result: "ok".to_string(),
+        reward: 1,
+        timestamp: "2026-03-20T10:00:00".to_string(),
+    };
+    trajectory::save_trajectory(&saga_dir, &t).unwrap();
+
+    // Create step 1 with task_type "tts"
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("gen-audio"),
+        next_prompt: Some("Generate TTS audio"),
+        next_context: vec![],
+        next_role: "deterministic",
+        next_task_type: Some("tts"),
+        planned: vec![],
+        done: false,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Verify task_type was set
+    let step_dir = step::find_step_dir(&saga_dir, 1).unwrap();
+    let step_config = step::load_step(&step_dir).unwrap();
+    assert_eq!(step_config.task_type, Some("tts".to_string()));
+
+    // Next should succeed and include trajectory data (we just verify it runs)
+    let code = next::run(tmp.path()).unwrap();
+    assert_eq!(code, 0);
 }

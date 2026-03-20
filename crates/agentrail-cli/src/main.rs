@@ -50,6 +50,9 @@ enum Commands {
         /// Role for the next step (meta, production, deterministic, validation)
         #[arg(long, default_value = "legacy")]
         next_role: String,
+        /// Task type for the next step (e.g., "tts", "ffmpeg-concat")
+        #[arg(long)]
+        next_task_type: Option<String>,
         /// Planned future steps, each "slug: description"
         #[arg(long)]
         planned: Vec<String>,
@@ -96,6 +99,7 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             next_prompt,
             next_context,
             next_role,
+            next_task_type,
             planned,
             done,
         } => {
@@ -105,6 +109,7 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
                 next_prompt: next_prompt.as_deref(),
                 next_context,
                 next_role: &next_role,
+                next_task_type: next_task_type.as_deref(),
                 planned,
                 done,
             };

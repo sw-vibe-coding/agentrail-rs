@@ -1,6 +1,6 @@
 use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaStatus, StepStatus};
-use agentrail_store::{saga, step};
+use agentrail_store::{saga, step, trajectory};
 use std::path::Path;
 
 /// Returns exit code: 0 = active step found, 1 = saga complete, 2 = no saga
@@ -63,6 +63,10 @@ pub fn run(saga_path: &Path) -> Result<u8> {
                 println!("Status: {}", step_config.status);
                 println!("Description: {}", step_config.description);
 
+                if let Some(ref task_type) = step_config.task_type {
+                    println!("Task type: {}", task_type);
+                }
+
                 if !step_config.context_files.is_empty() {
                     println!("\nContext files:");
                     for f in &step_config.context_files {
@@ -76,6 +80,20 @@ pub fn run(saga_path: &Path) -> Result<u8> {
                     if !prompt.trim().is_empty() {
                         println!("\n=== PROMPT ===");
                         println!("{}", prompt.trim());
+                    }
+                }
+
+                // ICRL: inject past successful trajectories for this task type
+                if let Some(ref task_type) = step_config.task_type {
+                    let successes = trajectory::retrieve_successes(&saga_dir, task_type, 3)?;
+                    if !successes.is_empty() {
+                        println!("\n=== PAST SUCCESSES ({}) ===", task_type);
+                        for t in &successes {
+                            println!(
+                                "  [{}] action={}, result={}, reward={:+}",
+                                t.timestamp, t.action, t.result, t.reward
+                            );
+                        }
                     }
                 }
 
