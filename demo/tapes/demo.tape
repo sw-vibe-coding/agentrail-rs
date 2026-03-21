@@ -1,11 +1,11 @@
 Output demo/tapes/demo.gif
-Set FontSize 13
-Set Width 1200
-Set Height 900
-Set Theme "Molokai"
-Set Padding 15
-Set TypingSpeed 20ms
+Output demo/tapes/demo.mp4
 Set Shell "bash"
+Set FontSize 14
+Set Width 1000
+Set Height 700
+Set Theme "Dracula"
+Set TypingSpeed 20ms
 
 # Hidden setup
 Hide

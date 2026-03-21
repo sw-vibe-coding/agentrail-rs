@@ -18,14 +18,11 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
     let mut config = saga::load_saga(saga_path)?;
     let saga_dir = saga::saga_dir(saga_path);
 
-    // Try to snapshot session (non-fatal)
-    match session::snapshot_session(&saga_dir, saga_path) {
-        Ok((path, lines)) => {
-            if lines > 0 {
-                eprintln!("Snapshotted {} new lines to {}", lines, path.display());
-            }
-        }
-        Err(e) => eprintln!("Warning: session snapshot failed: {}", e),
+    // Try to snapshot session (non-fatal, silent when no session exists)
+    if let Ok((path, lines)) = session::snapshot_session(&saga_dir, saga_path)
+        && lines > 0
+    {
+        eprintln!("Snapshotted {} new lines to {}", lines, path.display());
     }
 
     // Read summary
