@@ -1,0 +1,42 @@
+task_type = "clippy-fix"
+version = 1
+updated_at = "2026-03-21T10:00:00"
+distilled_from = 0
+
+[procedure]
+summary = "Fix clippy warnings properly without bypassing, allowing, or disabling them"
+steps = [
+    "Run cargo clippy -- -D warnings to identify all warnings",
+    "For each warning, apply the suggested fix from clippy output",
+    "NEVER add #[allow(...)] attributes to suppress warnings",
+    "NEVER use --allow-warnings or -A flags",
+    "NEVER use #[cfg_attr(...)] to conditionally suppress",
+    "Re-run clippy after fixes to confirm zero warnings remain",
+    "Run cargo test to confirm fixes did not break anything",
+]
+
+[output_contract]
+required_files = []
+acceptance_checks = ["clippy-clean", "tests-pass"]
+
+success_patterns = [
+    "Read the clippy suggestion carefully -- it usually has the exact fix",
+    "derivable_impls: replace manual Default impl with #[derive(Default)] and #[default] on variant",
+    "collapsible_if: merge nested if-let chains using && let syntax (edition 2024)",
+    "unused_imports: delete the unused import line entirely",
+]
+
+[[common_failures]]
+mode = "allow_attribute"
+description = "Adding #[allow(clippy::...)] instead of fixing the actual warning"
+frequency = 8
+
+[[common_failures]]
+mode = "wrong_fix"
+description = "Applying incorrect fix that introduces new warnings or compilation errors"
+frequency = 2
+
+[[common_failures]]
+mode = "incomplete_fix"
+description = "Fixing some warnings but not re-running clippy to catch remaining ones"
+frequency = 3

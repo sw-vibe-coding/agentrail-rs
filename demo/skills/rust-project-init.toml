@@ -1,0 +1,35 @@
+task_type = "rust-project-init"
+version = 1
+updated_at = "2026-03-21T10:00:00"
+distilled_from = 0
+
+[procedure]
+summary = "Create a new Rust project with edition 2024 and strict quality gates"
+steps = [
+    "Run cargo init (or cargo new) to create the project",
+    "Edit Cargo.toml: set edition = '2024' (NOT 2021)",
+    "Verify edition with grep or cat Cargo.toml",
+    "Run cargo build to confirm it compiles",
+    "Run cargo clippy -- -D warnings to confirm zero warnings",
+    "Run cargo fmt --check to confirm formatting",
+]
+
+[output_contract]
+required_files = ["Cargo.toml", "src/main.rs"]
+acceptance_checks = ["edition-2024", "clippy-clean", "fmt-clean"]
+
+success_patterns = [
+    "Always set edition = '2024' explicitly, never accept the default",
+    "Run all three quality gates before considering the project initialized",
+    "Use -D warnings with clippy to treat warnings as errors",
+]
+
+[[common_failures]]
+mode = "wrong_edition"
+description = "Leaving the default edition (2021) instead of setting 2024"
+frequency = 5
+
+[[common_failures]]
+mode = "skip_clippy"
+description = "Skipping clippy check after init, missing early warnings"
+frequency = 2

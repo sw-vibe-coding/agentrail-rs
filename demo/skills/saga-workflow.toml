@@ -1,0 +1,37 @@
+task_type = "saga-workflow"
+version = 1
+updated_at = "2026-03-21T10:00:00"
+distilled_from = 0
+
+[procedure]
+summary = "Manage a multi-step project using agentrail saga workflow"
+steps = [
+    "Run agentrail init --name <name> --plan <plan> to create the saga",
+    "Run agentrail next to see current state and instructions",
+    "Run agentrail complete --summary <what was done> --next-slug <slug> --next-prompt <instructions> to advance",
+    "Run agentrail begin to mark step as in-progress",
+    "Do the work described in the step prompt",
+    "Run agentrail complete --summary <what was done> with --done or --next-* flags",
+    "Repeat until saga is complete",
+]
+
+[output_contract]
+required_files = []
+acceptance_checks = ["saga-complete"]
+
+success_patterns = [
+    "Always run agentrail next at the start of a fresh context",
+    "Write clear summaries that help the next agent understand what happened",
+    "Use --next-task-type when the next step has a known task type with skills",
+    "Use --planned to give visibility into future steps",
+]
+
+[[common_failures]]
+mode = "skip_next"
+description = "Starting work without running agentrail next first, missing context"
+frequency = 4
+
+[[common_failures]]
+mode = "vague_summary"
+description = "Writing vague summaries like 'done' instead of describing what was accomplished"
+frequency = 3
