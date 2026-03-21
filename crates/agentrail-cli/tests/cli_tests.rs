@@ -1,6 +1,6 @@
 use agentrail_cli::commands::{abort, begin, complete, history, init, next, plan, status};
-use agentrail_core::{SagaStatus, Trajectory};
-use agentrail_store::{saga, step, trajectory};
+use agentrail_core::{FailureMode, OutputContract, Procedure, SagaStatus, Skill, Trajectory};
+use agentrail_store::{saga, skill, step, trajectory};
 use tempfile::tempdir;
 
 #[test]
@@ -235,6 +235,64 @@ fn complete_with_task_type_and_next_shows_trajectories() {
     assert_eq!(step_config.task_type, Some("tts".to_string()));
 
     // Next should succeed and include trajectory data (we just verify it runs)
+    let code = next::run(tmp.path()).unwrap();
+    assert_eq!(code, 0);
+}
+
+#[test]
+fn next_shows_skill_and_trajectories_together() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Save a skill doc for "tts"
+    let s = Skill {
+        task_type: "tts".to_string(),
+        version: 2,
+        updated_at: "2026-03-21T10:00:00".to_string(),
+        distilled_from: 5,
+        procedure: Procedure {
+            summary: "Generate TTS audio".to_string(),
+            steps: vec!["Read script".to_string(), "Call API".to_string()],
+        },
+        success_patterns: vec!["Use Gradio client".to_string()],
+        common_failures: vec![FailureMode {
+            mode: "wrong_api".to_string(),
+            description: "Used HTTP instead of Gradio".to_string(),
+            frequency: 3,
+        }],
+        output_contract: OutputContract {
+            required_files: vec!["output.wav".to_string()],
+            acceptance_checks: vec!["file-exists".to_string()],
+        },
+    };
+    skill::save_skill(&saga_dir, &s).unwrap();
+
+    // Save a trajectory
+    let t = Trajectory {
+        task_type: "tts".to_string(),
+        state: serde_json::json!({}),
+        action: "gradio_client".to_string(),
+        result: "ok".to_string(),
+        reward: 1,
+        timestamp: "2026-03-21T09:00:00".to_string(),
+    };
+    trajectory::save_trajectory(&saga_dir, &t).unwrap();
+
+    // Create step with task_type
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("gen-audio"),
+        next_prompt: Some("Generate TTS"),
+        next_context: vec![],
+        next_role: "deterministic",
+        next_task_type: Some("tts"),
+        planned: vec![],
+        done: false,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Next should show both skill and trajectory
     let code = next::run(tmp.path()).unwrap();
     assert_eq!(code, 0);
 }

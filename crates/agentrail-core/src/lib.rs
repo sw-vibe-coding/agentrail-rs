@@ -163,6 +163,49 @@ pub struct OutputContract {
 }
 
 // ---------------------------------------------------------------------------
+// Skill model (XSkill dual-memory: strategic workflow docs per task category)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Skill {
+    pub task_type: String,
+    #[serde(default = "default_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub distilled_from: u32,
+    #[serde(default)]
+    pub procedure: Procedure,
+    #[serde(default)]
+    pub success_patterns: Vec<String>,
+    #[serde(default)]
+    pub common_failures: Vec<FailureMode>,
+    #[serde(default)]
+    pub output_contract: OutputContract,
+}
+
+fn default_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Procedure {
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureMode {
+    pub mode: String,
+    pub description: String,
+    #[serde(default)]
+    pub frequency: u32,
+}
+
+// ---------------------------------------------------------------------------
 // Utilities (from avoid-compaction)
 // ---------------------------------------------------------------------------
 
