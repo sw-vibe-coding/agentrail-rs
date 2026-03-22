@@ -82,6 +82,7 @@ fn create_step_with_role() {
         role: StepRole::Production,
         context_files: &[],
         task_type: None,
+        job_spec: None,
     })
     .unwrap();
 
@@ -112,6 +113,7 @@ fn create_step_with_task_type() {
         role: StepRole::Deterministic,
         context_files: &[],
         task_type: Some("tts"),
+        job_spec: None,
     })
     .unwrap();
 
@@ -136,6 +138,7 @@ fn transition_step_valid_transitions() {
         role: StepRole::Legacy,
         context_files: &[],
         task_type: None,
+        job_spec: None,
     })
     .unwrap();
     let mut config = step::load_step(&dir).unwrap();
@@ -155,6 +158,7 @@ fn transition_step_valid_transitions() {
         role: StepRole::Legacy,
         context_files: &[],
         task_type: None,
+        job_spec: None,
     })
     .unwrap();
     let mut config2 = step::load_step(&dir2).unwrap();
@@ -178,6 +182,7 @@ fn transition_step_invalid_transitions() {
         role: StepRole::Legacy,
         context_files: &[],
         task_type: None,
+        job_spec: None,
     })
     .unwrap();
     let mut config = step::load_step(&dir).unwrap();
@@ -214,6 +219,7 @@ fn list_steps_sorted_by_number() {
             role,
             context_files: &[],
             task_type: None,
+            job_spec: None,
         })
         .unwrap();
     }

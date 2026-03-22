@@ -1,0 +1,22 @@
+[domain]
+name = "mock"
+description = "Mock domain for testing executors, validators, and the orchestrator loop"
+version = "0.1.0"
+
+[[task_types]]
+name = "write-file"
+description = "Write content to a file"
+executor = "write-file"
+validators = ["file-exists"]
+
+[[task_types]]
+name = "echo"
+description = "Echo input to stdout (simplest executor)"
+executor = "echo"
+validators = []
+
+[[task_types]]
+name = "transform"
+description = "Read a file, transform content, write to output"
+executor = "transform"
+validators = ["file-exists", "content-matches"]

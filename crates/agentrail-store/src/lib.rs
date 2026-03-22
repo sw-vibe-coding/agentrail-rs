@@ -1,3 +1,4 @@
+pub mod domain;
 pub mod saga;
 pub mod session;
 pub mod skill;

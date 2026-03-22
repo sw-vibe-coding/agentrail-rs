@@ -52,6 +52,7 @@ pub struct CreateStepParams<'a> {
     pub role: StepRole,
     pub context_files: &'a [String],
     pub task_type: Option<&'a str>,
+    pub job_spec: Option<agentrail_core::JobSpec>,
 }
 
 pub fn create_step(p: &CreateStepParams<'_>) -> Result<PathBuf> {
@@ -76,7 +77,7 @@ pub fn create_step(p: &CreateStepParams<'_>) -> Result<PathBuf> {
         created_at: agentrail_core::timestamp_iso(),
         completed_at: None,
         transcript_file: None,
-        job_spec: None,
+        job_spec: p.job_spec.clone(),
         packet_file: None,
         task_type: task_type.map(|s| s.to_string()),
     };

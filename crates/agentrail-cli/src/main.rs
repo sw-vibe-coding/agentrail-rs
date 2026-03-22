@@ -68,6 +68,8 @@ enum Commands {
     },
     /// Show all step summaries
     History,
+    /// Auto-execute deterministic steps, pause at agent steps
+    RunLoop,
     /// Mark current step as blocked
     Abort {
         /// Reason for blocking
@@ -115,6 +117,7 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             };
             commands::complete::run(saga_path, &args).map(|_| 0)
         }
+        Commands::RunLoop => commands::run_loop::run(saga_path),
         Commands::Plan { update } => commands::plan::run(saga_path, update.as_deref()).map(|_| 0),
         Commands::History => commands::history::run(saga_path).map(|_| 0),
         Commands::Abort { reason } => commands::abort::run(saga_path, reason.as_deref()).map(|_| 0),

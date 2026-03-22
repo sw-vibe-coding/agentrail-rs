@@ -85,6 +85,7 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
             role,
             context_files: &args.next_context,
             task_type: args.next_task_type,
+            job_spec: None,
         })?;
 
         config.current_step = next_number;
@@ -110,6 +111,7 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
             role: StepRole::Legacy,
             context_files: &[],
             task_type: None,
+            job_spec: None,
         })?;
         println!("Planned step {:03}-{}.", number, slug);
     }

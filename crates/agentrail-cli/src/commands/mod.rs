@@ -5,4 +5,5 @@ pub mod history;
 pub mod init;
 pub mod next;
 pub mod plan;
+pub mod run_loop;
 pub mod status;

@@ -1,0 +1,23 @@
+task_type = "write-file"
+version = 1
+updated_at = "2026-03-22"
+distilled_from = 0
+
+[procedure]
+summary = "Write content to a specified file path"
+steps = [
+    "Receive output_path and content parameters",
+    "Write content to the output path",
+    "Validate the file exists and has correct size",
+]
+
+success_patterns = ["Always verify the file was written after execution"]
+
+[[common_failures]]
+mode = "missing_dir"
+description = "Parent directory does not exist"
+frequency = 1
+
+[output_contract]
+required_files = []
+acceptance_checks = ["file-exists"]
