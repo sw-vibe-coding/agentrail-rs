@@ -105,10 +105,20 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         return Ok(());
     }
 
-    // Create next step if specified
-    if let (Some(slug), Some(prompt_raw)) = (args.next_slug, args.next_prompt) {
+    // Advance to next step: use existing planned step if present, else create new
+    let next_number = config.current_step + 1;
+    if let Ok(existing_dir) = step::find_step_dir(&saga_dir, next_number) {
+        // A planned step already exists at this number -- advance to it
+        let existing = step::load_step(&existing_dir)?;
+        config.current_step = next_number;
+        saga::save_saga(saga_path, &config)?;
+        println!(
+            "Advanced to existing step {:03}-{} [{}].",
+            existing.number, existing.slug, existing.role
+        );
+    } else if let (Some(slug), Some(prompt_raw)) = (args.next_slug, args.next_prompt) {
+        // No planned step exists -- create a new one
         let prompt = agentrail_core::read_input(prompt_raw)?;
-        let next_number = config.current_step + 1;
         let role = parse_role(args.next_role);
 
         let description = agentrail_core::truncate(&prompt, 80);

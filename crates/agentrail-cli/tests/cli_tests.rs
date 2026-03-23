@@ -511,3 +511,62 @@ fn full_loop_complete_with_trajectory_then_distill_then_next() {
     let s = skill::load_skill(&saga_dir, "tts").unwrap().unwrap();
     assert_eq!(s.distilled_from, 1);
 }
+
+#[test]
+fn complete_advances_to_existing_planned_step() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Create step 1 with planned steps 2 and 3
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("step1"),
+        next_prompt: Some("first"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec![
+            "step2: do second thing".to_string(),
+            "step3: do third thing".to_string(),
+        ],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Steps 1, 2, 3 exist. Current is 1.
+    let steps = step::list_steps(&saga_dir).unwrap();
+    assert_eq!(steps.len(), 3);
+
+    // Complete step 1 -- should advance to existing step 2, not create a duplicate
+    let args2 = complete::CompleteArgs {
+        summary: Some("did step 1"),
+        next_slug: Some("step2-dup"),
+        next_prompt: Some("this should be ignored"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args2).unwrap();
+
+    // Should still have 3 steps (no duplicate created)
+    let steps = step::list_steps(&saga_dir).unwrap();
+    assert_eq!(steps.len(), 3);
+
+    // Current step should be 2
+    let config = saga::load_saga(tmp.path()).unwrap();
+    assert_eq!(config.current_step, 2);
+
+    // Step 2 should be the original planned step, not the duplicate
+    let step2_dir = step::find_step_dir(&saga_dir, 2).unwrap();
+    let step2 = step::load_step(&step2_dir).unwrap();
+    assert_eq!(step2.slug, "step2");
+}
