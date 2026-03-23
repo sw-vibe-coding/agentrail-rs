@@ -1,6 +1,6 @@
 use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaStatus, StepStatus};
-use agentrail_store::{saga, skill, step, trajectory};
+use agentrail_store::{domain, saga, skill, step, trajectory};
 use std::path::Path;
 
 /// Returns exit code: 0 = active step found, 1 = saga complete, 2 = no saga
@@ -85,8 +85,18 @@ pub fn run(saga_path: &Path) -> Result<u8> {
 
                 // XSkill dual memory: inject skill doc + past experiences
                 if let Some(ref task_type) = step_config.task_type {
-                    // Skill (strategic workflow)
-                    if let Some(s) = skill::load_skill(&saga_dir, task_type)? {
+                    // Skill (strategic workflow) -- local first, then domain repo
+                    let local_skill = skill::load_skill(&saga_dir, task_type)?;
+                    let s = if local_skill.is_some() {
+                        local_skill
+                    } else if let Some((domain_dir, _)) =
+                        domain::find_domain_for_task(&saga_dir, task_type)?
+                    {
+                        skill::load_skill(&domain_dir, task_type)?
+                    } else {
+                        None
+                    };
+                    if let Some(s) = s {
                         println!("\n=== SKILL: {} (v{}) ===", task_type, s.version);
                         if !s.procedure.summary.is_empty() {
                             println!("{}", s.procedure.summary);
