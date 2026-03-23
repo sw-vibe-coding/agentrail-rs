@@ -1,11 +1,46 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::LazyLock;
 
 use agentrail_cli::commands;
 
+static VERSION: LazyLock<String> = LazyLock::new(|| {
+    let version = env!("CARGO_PKG_VERSION");
+    let commit = env!("BUILD_COMMIT");
+    let commit_full = env!("BUILD_COMMIT_FULL");
+    let timestamp = env!("BUILD_TIMESTAMP");
+    let host = env!("BUILD_HOST");
+    format!(
+        "{version}\n\
+         Copyright (c) 2026 Michael A Wright\n\
+         License: MIT\n\
+         Repository: https://github.com/sw-vibe-coding/agentrail-rs\n\
+         \n\
+         Build Information:\n\
+         {}\
+         {}\
+         {}",
+        if !host.is_empty() {
+            format!("  Host: {host}\n")
+        } else {
+            String::new()
+        },
+        if !commit.is_empty() {
+            format!("  Commit: {commit} ({commit_full})\n")
+        } else {
+            String::new()
+        },
+        if !timestamp.is_empty() {
+            format!("  Timestamp: {timestamp}\n")
+        } else {
+            String::new()
+        },
+    )
+});
+
 #[derive(Parser)]
-#[command(name = "agentrail", version)]
+#[command(name = "agentrail", version = &**VERSION)]
 #[command(about = "Workflow CLI for keeping AI agents on track")]
 struct Cli {
     /// Path to the project directory (default: current directory)
