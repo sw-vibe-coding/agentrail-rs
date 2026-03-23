@@ -59,6 +59,15 @@ enum Commands {
         /// Mark the saga as complete
         #[arg(long)]
         done: bool,
+        /// Reward for trajectory recording (-1, 0, or 1; default: 1)
+        #[arg(long)]
+        reward: Option<i8>,
+        /// Actions taken (for trajectory recording; defaults to summary)
+        #[arg(long)]
+        actions: Option<String>,
+        /// Failure mode identifier (for trajectory on failure)
+        #[arg(long)]
+        failure_mode: Option<String>,
     },
     /// View or update the saga plan
     Plan {
@@ -68,6 +77,11 @@ enum Commands {
     },
     /// Show all step summaries
     History,
+    /// Distill trajectories into a skill document
+    Distill {
+        /// Task type to distill (e.g., "tts", "ffmpeg-concat")
+        task_type: String,
+    },
     /// Auto-execute deterministic steps, pause at agent steps
     RunLoop,
     /// Mark current step as blocked
@@ -104,6 +118,9 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             next_task_type,
             planned,
             done,
+            reward,
+            actions,
+            failure_mode,
         } => {
             let args = commands::complete::CompleteArgs {
                 summary: summary.as_deref(),
@@ -114,9 +131,13 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
                 next_task_type: next_task_type.as_deref(),
                 planned,
                 done,
+                reward,
+                actions: actions.as_deref(),
+                failure_mode: failure_mode.as_deref(),
             };
             commands::complete::run(saga_path, &args).map(|_| 0)
         }
+        Commands::Distill { task_type } => commands::distill::run(saga_path, &task_type).map(|_| 0),
         Commands::RunLoop => commands::run_loop::run(saga_path),
         Commands::Plan { update } => commands::plan::run(saga_path, update.as_deref()).map(|_| 0),
         Commands::History => commands::history::run(saga_path).map(|_| 0),

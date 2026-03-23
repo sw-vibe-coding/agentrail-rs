@@ -1,6 +1,6 @@
 use agentrail_core::error::Result;
-use agentrail_core::{SagaStatus, StepRole, StepStatus};
-use agentrail_store::{saga, session, step};
+use agentrail_core::{SagaStatus, StepRole, StepStatus, Trajectory};
+use agentrail_store::{saga, session, step, trajectory};
 use std::path::Path;
 
 pub struct CompleteArgs<'a> {
@@ -12,6 +12,12 @@ pub struct CompleteArgs<'a> {
     pub next_task_type: Option<&'a str>,
     pub planned: Vec<String>,
     pub done: bool,
+    /// Reward for this step's trajectory (-1, 0, or 1)
+    pub reward: Option<i8>,
+    /// Description of actions taken (for trajectory recording)
+    pub actions: Option<&'a str>,
+    /// Failure mode identifier (for trajectory recording on failure)
+    pub failure_mode: Option<&'a str>,
 }
 
 pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
@@ -33,14 +39,12 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
 
     // Complete current step (or handle step 0)
     if config.current_step == 0 {
-        // Step 0: just save the summary at the saga level
         if !summary_text.is_empty() {
             let summary_path = saga_dir.join("step0-summary.md");
             std::fs::write(&summary_path, &summary_text)?;
             println!("Saved step 0 summary.");
         }
     } else {
-        // Find and complete the current step
         let step_dir = step::find_step_dir(&saga_dir, config.current_step)?;
         let mut step_config = step::load_step(&step_dir)?;
 
@@ -54,6 +58,38 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
 
         if !summary_text.is_empty() {
             step::save_summary(&step_dir, &summary_text)?;
+        }
+
+        // Record trajectory if step has a task_type and reward is provided
+        if let Some(ref task_type) = step_config.task_type {
+            let reward = args.reward.unwrap_or(1);
+            let action = args
+                .actions
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| summary_text.clone());
+            let result = if reward > 0 {
+                "success".to_string()
+            } else if let Some(fm) = args.failure_mode {
+                format!("failure: {fm}")
+            } else {
+                "failure".to_string()
+            };
+
+            let t = Trajectory {
+                task_type: task_type.clone(),
+                state: serde_json::json!({"step": step_config.slug, "number": step_config.number}),
+                action,
+                result,
+                reward,
+                timestamp: agentrail_core::timestamp_iso(),
+            };
+            let path = trajectory::save_trajectory(&saga_dir, &t)?;
+            println!(
+                "Recorded trajectory for '{}' (reward={:+}) at {}",
+                task_type,
+                reward,
+                path.display()
+            );
         }
 
         println!(

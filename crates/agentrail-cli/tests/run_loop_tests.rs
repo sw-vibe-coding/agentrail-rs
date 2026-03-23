@@ -100,9 +100,10 @@ fn run_loop_executes_deterministic_step() {
     assert_eq!(step_config.status, agentrail_core::StepStatus::Completed);
 
     // Verify trajectory was recorded
-    let trajectories =
-        agentrail_store::trajectory::load_all_trajectories(&saga_dir.join("trajectories/write-file"))
-            .unwrap();
+    let trajectories = agentrail_store::trajectory::load_all_trajectories(
+        &saga_dir.join("trajectories/write-file"),
+    )
+    .unwrap();
     assert_eq!(trajectories.len(), 1);
     assert_eq!(trajectories[0].reward, 1);
 }

@@ -1,4 +1,4 @@
-use agentrail_cli::commands::{abort, begin, complete, history, init, next, plan, status};
+use agentrail_cli::commands::{abort, begin, complete, distill, history, init, next, plan, status};
 use agentrail_core::{FailureMode, OutputContract, Procedure, SagaStatus, Skill, Trajectory};
 use agentrail_store::{saga, skill, step, trajectory};
 use tempfile::tempdir;
@@ -72,6 +72,9 @@ fn full_workflow() {
         next_task_type: None,
         planned: vec![],
         done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args).unwrap();
 
@@ -100,6 +103,9 @@ fn full_workflow() {
         next_task_type: None,
         planned: vec![],
         done: true,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args2).unwrap();
 
@@ -140,6 +146,9 @@ fn history_shows_steps() {
         next_task_type: None,
         planned: vec![],
         done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args).unwrap();
 
@@ -160,6 +169,9 @@ fn abort_blocks_step() {
         next_task_type: None,
         planned: vec![],
         done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args).unwrap();
 
@@ -188,6 +200,9 @@ fn complete_with_planned_steps() {
             "step3: do third thing".to_string(),
         ],
         done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args).unwrap();
 
@@ -226,6 +241,9 @@ fn complete_with_task_type_and_next_shows_trajectories() {
         next_task_type: Some("tts"),
         planned: vec![],
         done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args).unwrap();
 
@@ -289,10 +307,207 @@ fn next_shows_skill_and_trajectories_together() {
         next_task_type: Some("tts"),
         planned: vec![],
         done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
     };
     complete::run(tmp.path(), &args).unwrap();
 
     // Next should show both skill and trajectory
     let code = next::run(tmp.path()).unwrap();
     assert_eq!(code, 0);
+}
+
+#[test]
+fn complete_records_trajectory_with_reward() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Create step 1 with task_type
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("gen-audio"),
+        next_prompt: Some("Generate TTS"),
+        next_context: vec![],
+        next_role: "deterministic",
+        next_task_type: Some("tts"),
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Begin and complete step 1 with reward
+    begin::run(tmp.path()).unwrap();
+    let args2 = complete::CompleteArgs {
+        summary: Some("Generated TTS audio successfully"),
+        next_slug: None,
+        next_prompt: None,
+        next_context: vec![],
+        next_role: "legacy",
+        next_task_type: None,
+        planned: vec![],
+        done: true,
+        reward: Some(1),
+        actions: Some("gradio_client /tts with reference voice"),
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args2).unwrap();
+
+    // Verify trajectory was recorded
+    let trajectories =
+        trajectory::load_all_trajectories(&saga_dir.join("trajectories/tts")).unwrap();
+    assert_eq!(trajectories.len(), 1);
+    assert_eq!(trajectories[0].task_type, "tts");
+    assert_eq!(trajectories[0].reward, 1);
+    assert_eq!(
+        trajectories[0].action,
+        "gradio_client /tts with reference voice"
+    );
+    assert_eq!(trajectories[0].result, "success");
+}
+
+#[test]
+fn complete_records_failure_trajectory() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Create step 1 with task_type
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("gen-audio"),
+        next_prompt: Some("Generate TTS"),
+        next_context: vec![],
+        next_role: "deterministic",
+        next_task_type: Some("tts"),
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Complete with failure
+    let args2 = complete::CompleteArgs {
+        summary: Some("TTS failed - used wrong API"),
+        next_slug: None,
+        next_prompt: None,
+        next_context: vec![],
+        next_role: "legacy",
+        next_task_type: None,
+        planned: vec![],
+        done: true,
+        reward: Some(-1),
+        actions: Some("curl http://localhost:7860/tts"),
+        failure_mode: Some("wrong_api"),
+    };
+    complete::run(tmp.path(), &args2).unwrap();
+
+    let trajectories =
+        trajectory::load_all_trajectories(&saga_dir.join("trajectories/tts")).unwrap();
+    assert_eq!(trajectories.len(), 1);
+    assert_eq!(trajectories[0].reward, -1);
+    assert_eq!(trajectories[0].result, "failure: wrong_api");
+}
+
+#[test]
+fn distill_generates_skill_from_trajectories() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Pre-populate trajectories
+    for (action, reward, result) in [
+        ("gradio_client /tts", 1i8, "success"),
+        ("gradio_client /tts", 1, "success"),
+        ("gradio_client /tts", 1, "success"),
+        ("curl http://localhost/tts", -1, "failure: wrong_api"),
+        ("curl http://localhost/tts", -1, "failure: wrong_api"),
+    ] {
+        let t = Trajectory {
+            task_type: "tts".to_string(),
+            state: serde_json::json!({}),
+            action: action.to_string(),
+            result: result.to_string(),
+            reward,
+            timestamp: "2026-03-22T10:00:00".to_string(),
+        };
+        trajectory::save_trajectory(&saga_dir, &t).unwrap();
+    }
+
+    // No skill exists yet
+    assert!(skill::load_skill(&saga_dir, "tts").unwrap().is_none());
+
+    // Distill
+    distill::run(tmp.path(), "tts").unwrap();
+
+    // Skill should now exist
+    let s = skill::load_skill(&saga_dir, "tts").unwrap().unwrap();
+    assert_eq!(s.task_type, "tts");
+    assert_eq!(s.version, 1);
+    assert_eq!(s.distilled_from, 5);
+    assert!(!s.procedure.steps.is_empty());
+    assert!(!s.common_failures.is_empty());
+    assert_eq!(s.common_failures[0].mode, "wrong_api");
+    assert_eq!(s.common_failures[0].frequency, 2);
+
+    // Distill again increments version
+    distill::run(tmp.path(), "tts").unwrap();
+    let s2 = skill::load_skill(&saga_dir, "tts").unwrap().unwrap();
+    assert_eq!(s2.version, 2);
+}
+
+#[test]
+fn full_loop_complete_with_trajectory_then_distill_then_next() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p").unwrap();
+    let saga_dir = saga::saga_dir(tmp.path());
+
+    // Step 0 -> Step 1 (tts)
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("gen-audio"),
+        next_prompt: Some("Generate TTS"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: Some("tts"),
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Complete step 1 with trajectory
+    let args2 = complete::CompleteArgs {
+        summary: Some("Generated audio"),
+        next_slug: Some("gen-audio-2"),
+        next_prompt: Some("Generate TTS for segment 2"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: Some("tts"),
+        planned: vec![],
+        done: false,
+        reward: Some(1),
+        actions: Some("gradio_client /tts"),
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args2).unwrap();
+
+    // Distill creates skill from the trajectory
+    distill::run(tmp.path(), "tts").unwrap();
+
+    // Next for step 2 should show both the distilled skill and the trajectory
+    let code = next::run(tmp.path()).unwrap();
+    assert_eq!(code, 0);
+
+    // Verify skill exists
+    let s = skill::load_skill(&saga_dir, "tts").unwrap().unwrap();
+    assert_eq!(s.distilled_from, 1);
 }
