@@ -28,53 +28,50 @@ Every step records its trajectory (state, action, result, reward). On the next r
 
 ## Current Status
 
-**Phase 0 complete** -- the walking skeleton is functional:
+**Phases 0-5 implemented.** The full ICRL loop is functional:
 
-- 8 CLI commands: `init`, `status`, `next`, `begin`, `complete`, `plan`, `history`, `abort`
-- File-based persistence (TOML configs, JSON trajectories, JSONL session snapshots)
-- Full saga lifecycle: create, advance through steps, complete
-- Step role typing (Meta, Production, Deterministic, Validation, Legacy)
-- 24 integration tests, all passing
-- Pre-commit quality gates: `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
-
-**What's not yet implemented:**
-
-- Deterministic step execution (agentrail-exec)
-- Output validators and acceptance contracts (agentrail-validate)
-- Handoff packet generation and rendering
-- Trajectory retrieval and injection into prompts
-- Hybrid orchestrator loop (auto-advance through deterministic steps)
+- 12 CLI commands: `setup`, `init`, `status`, `next`, `begin`, `complete`, `plan`, `history`, `distill`, `run-loop`, `abort`, `help`
+- XSkill dual memory: skills (strategic workflow docs) + trajectories (per-run records)
+- ICRL injection: `next` shows skill procedures, failure modes, and past successful trajectories
+- Trajectory recording via `complete --reward --actions --failure-mode`
+- Skill distillation: `distill` generates skills from accumulated trajectories
+- Domain repos: register external skill/executor/validator repos
+- Shell executors and validators for deterministic step auto-execution
+- Orchestrator loop: `run-loop` auto-executes deterministic steps, pauses at agent steps
+- 41 integration tests, all passing
 
 ## Quick Start
 
 ```bash
 # Build and install
-cargo install --path crates/agentrail-cli
+cargo build --release
+sw-install -p .
 
-# Initialize a saga
-agentrail init --name "build-feature-x" --plan "Plan text or path to plan.md"
+# Bootstrap a project (creates saga + CLAUDE.md + domain registration)
+cd ~/my-project
+agentrail setup --name my-project \
+  --plan "Build a web app with user auth" \
+  --domain /path/to/agentrail-domain-coding
 
-# See current state (designed for agent consumption at session start)
-agentrail next
+# Create the first step
+agentrail complete --summary "Initialized" \
+  --next-slug scaffold \
+  --next-prompt "Set up project structure" \
+  --next-role production \
+  --planned "implement: Build core logic" \
+  --planned "test: Write tests"
 
-# Complete step 0 (initial setup), create step 1
-agentrail complete --summary "Scaffolding done" \
-  --next-slug implement \
-  --next-prompt "Write the parser module" \
-  --next-role production
-
-# Mark step as in-progress
-agentrail begin
-
-# Complete step and finish the saga
-agentrail complete --summary "Parser implemented and tested" --done
-
-# Other commands
-agentrail status              # Show saga state
-agentrail plan --update "new plan text"  # Update the plan
-agentrail history             # Show all step summaries
-agentrail abort --reason "blocked on dependency"  # Block current step
+# Start Claude Code
+claude "go"
 ```
+
+Or use the interactive wizard:
+
+```bash
+bash /path/to/agentrail-rs/scripts/agentrail-wizard.sh
+```
+
+See [Getting Started](docs/getting-started.md) for the full walkthrough.
 
 ## Agent Workflow
 

@@ -62,6 +62,18 @@ enum Commands {
         #[arg(long)]
         plan: String,
     },
+    /// Bootstrap a project: create saga, CLAUDE.md, and register domain
+    Setup {
+        /// Name for the saga
+        #[arg(long)]
+        name: String,
+        /// Plan: file path, literal text, or "-" for stdin
+        #[arg(long)]
+        plan: String,
+        /// Path to a domain repo to register
+        #[arg(long)]
+        domain: Option<String>,
+    },
     /// Show current saga state
     Status,
     /// Output current step prompt and context for a fresh agent session
@@ -141,6 +153,9 @@ fn main() -> ExitCode {
 fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::error::Result<u8> {
     match command {
         Commands::Init { name, plan } => commands::init::run(saga_path, &name, &plan).map(|_| 0),
+        Commands::Setup { name, plan, domain } => {
+            commands::setup::run(saga_path, &name, &plan, domain.as_deref()).map(|_| 0)
+        }
         Commands::Status => commands::status::run(saga_path).map(|_| 0),
         Commands::Next => commands::next::run(saga_path),
         Commands::Begin => commands::begin::run(saga_path).map(|_| 0),
