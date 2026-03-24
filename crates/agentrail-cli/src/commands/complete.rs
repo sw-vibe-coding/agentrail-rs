@@ -162,6 +162,12 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         println!("Planned step {:03}-{}.", number, slug);
     }
 
+    println!();
+    println!("=== SESSION COMPLETE ===");
+    println!("STOP. Do not make further changes in this session.");
+    println!("Any work after this point will be untracked.");
+    println!("Start a new session and run `agentrail next` for the next step.");
+
     Ok(())
 }
 
