@@ -74,6 +74,21 @@ enum Commands {
         #[arg(long)]
         domain: Option<String>,
     },
+    /// Add a step to the saga (for maintenance mode or ad-hoc tasks)
+    Add {
+        /// Step slug (short name)
+        #[arg(long)]
+        slug: String,
+        /// Step prompt: text, file path, or "-" for stdin
+        #[arg(long)]
+        prompt: String,
+        /// Step role (production, deterministic, validation, meta)
+        #[arg(long, default_value = "production")]
+        role: String,
+        /// Task type for skill/trajectory lookup
+        #[arg(long)]
+        task_type: Option<String>,
+    },
     /// Show current saga state
     Status,
     /// Output current step prompt and context for a fresh agent session
@@ -156,6 +171,12 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         Commands::Setup { name, plan, domain } => {
             commands::setup::run(saga_path, &name, &plan, domain.as_deref()).map(|_| 0)
         }
+        Commands::Add {
+            slug,
+            prompt,
+            role,
+            task_type,
+        } => commands::add::run(saga_path, &slug, &prompt, &role, task_type.as_deref()).map(|_| 0),
         Commands::Status => commands::status::run(saga_path).map(|_| 0),
         Commands::Next => commands::next::run(saga_path),
         Commands::Begin => commands::begin::run(saga_path).map(|_| 0),
