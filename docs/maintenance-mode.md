@@ -99,8 +99,16 @@ This project uses AgentRail in maintenance mode (ongoing tasks).
 agentrail next
 ```
 
-If there is a pending step: proceed to step 2.
-If there are no pending steps: ask the user what to work on.
+**If there is a pending step**: proceed to step 2.
+
+**If there are NO pending steps**: check if the user's message
+describes a task. If yes, create it:
+```bash
+agentrail add --slug <slug-from-description> \
+  --prompt "<user's task description>"
+```
+Then proceed to step 2. If the user just said "go" with no task
+description, ask: "No pending tasks. What should I work on?"
 
 ### 2. BEGIN
 ```bash
@@ -109,6 +117,12 @@ agentrail begin
 
 ### 3. WORK
 Do the task described in the step prompt. Do NOT ask permission.
+
+If you discover additional work needed while doing this task, add
+it to the backlog (do NOT do it now):
+```bash
+agentrail add --slug <related-task> --prompt "<description>"
+```
 
 ### 4. COMMIT
 Commit code changes with git.
@@ -119,11 +133,29 @@ agentrail complete --summary "what you accomplished" --reward 1
 ```
 
 ### 6. STOP
-Do NOT continue working after complete. The user will add more
-tasks and start a new session when ready.
+Do NOT continue working after complete. The user will start a new
+session when ready.
 ```
 
-## Example Workflow
+## Example Workflows
+
+### User describes task directly (simplest)
+
+```bash
+# User tells Claude what to do -- agent creates the step itself
+claude "fix the login timeout bug in auth.rs"
+# Agent: runs agentrail next (no pending steps)
+#        runs agentrail add --slug fix-login-timeout --prompt "fix the login timeout bug in auth.rs"
+#        runs agentrail begin
+#        does the work
+#        runs agentrail complete
+#        stops
+
+claude "add dark mode to the settings page"
+# same flow: agent creates step, does it, completes, stops
+```
+
+### Pre-load a batch of tasks
 
 ```bash
 # Monday: user adds tasks from issue tracker
@@ -135,10 +167,22 @@ agentrail add --slug feat-125 --prompt "Add export CSV button (issue #125)"
 claude "go"   # does fix-123, stops
 claude "go"   # does fix-124, stops
 claude "go"   # does feat-125, stops
+```
 
-# Wednesday: more tasks
+### Mixed: some pre-loaded, some ad-hoc
+
+```bash
+# Pre-load known tasks
 agentrail add --slug fix-130 --prompt "Fix email notifications"
-claude "go"   # does fix-130, stops
+agentrail add --slug fix-131 --prompt "Fix date formatting"
+
+# Process pre-loaded
+claude "go"   # does fix-130
+claude "go"   # does fix-131
+
+# Ad-hoc: user just describes what they need
+claude "the CSV export is missing the header row"
+claude "refactor the database module to use connection pooling"
 ```
 
 ## Transitioning Between Modes
