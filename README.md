@@ -30,7 +30,8 @@ Every step records its trajectory (state, action, result, reward). On the next r
 
 **Phases 0-5 implemented.** The full ICRL loop is functional:
 
-- 12 CLI commands: `setup`, `init`, `status`, `next`, `begin`, `complete`, `plan`, `history`, `distill`, `run-loop`, `abort`, `help`
+- 13 CLI commands: `setup`, `init`, `add`, `status`, `next`, `begin`, `complete`, `plan`, `history`, `distill`, `run-loop`, `abort`, `help`
+- Maintenance mode: `agentrail add` for ad-hoc tasks, agents create steps from user messages
 - XSkill dual memory: skills (strategic workflow docs) + trajectories (per-run records)
 - ICRL injection: `next` shows skill procedures, failure modes, and past successful trajectories
 - Trajectory recording via `complete --reward --actions --failure-mode`
@@ -71,7 +72,21 @@ Or use the interactive wizard:
 bash /path/to/agentrail-rs/scripts/agentrail-wizard.sh
 ```
 
-See [Getting Started](docs/getting-started.md) for the full walkthrough.
+For maintenance mode (ongoing bug fixes, ad-hoc tasks):
+
+```bash
+# Just tell Claude what to do -- no pre-planning needed
+claude "fix the login timeout bug in auth.rs"
+
+# Or pre-load tasks and process them
+agentrail add --slug fix-123 --prompt "Fix login timeout"
+agentrail add --slug fix-124 --prompt "Fix mobile layout"
+claude "go"   # does fix-123, stops
+claude "go"   # does fix-124, stops
+```
+
+See [Getting Started](docs/getting-started.md) for the full walkthrough,
+and [Maintenance Mode](docs/maintenance-mode.md) for ongoing task workflows.
 
 ## Agent Workflow
 

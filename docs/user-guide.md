@@ -223,16 +223,48 @@ claude "fix the off-by-one error in parser.c line 42"
 
 No saga overhead for trivial changes.
 
-### Option C: Continue the saga with new steps
-
-Manually edit `.agentrail/saga.toml` to set `status = "active"`, then
-create new steps:
+### Option C: Add steps with `agentrail add`
 
 ```bash
-# Edit saga.toml: change status back to "active"
-agentrail complete --summary "Reopening for bug fixes" \
-  --next-slug fix-bug-123 \
-  --next-prompt "Fix the parser bug"
+agentrail add --slug fix-bug-123 \
+  --prompt "Fix the parser bug"
+```
+
+This adds a step and auto-advances if the current step is done. Works
+on completed sagas too (reopens them). No need to manually edit
+saga.toml.
+
+### Option D: Maintenance mode (ongoing)
+
+For open-ended work (bug fixes, features, improvements), use
+maintenance mode. See `docs/maintenance-mode.md`.
+
+```bash
+# Just tell Claude what to do
+claude "fix the login timeout bug in auth.rs"
+```
+
+The agent creates the step itself via `agentrail add`, does the work,
+completes, and stops. No pre-planning needed.
+
+## Adding Steps Ad-Hoc
+
+The `agentrail add` command adds steps without going through `complete`:
+
+```bash
+# Add a single task
+agentrail add --slug fix-css --prompt "Fix mobile layout breakpoint"
+
+# Add with task type for skill injection
+agentrail add --slug refactor-api \
+  --prompt "Refactor API to async" \
+  --task-type rust-clippy-fix
+
+# Batch add, then process one at a time
+agentrail add --slug task-1 --prompt "First thing"
+agentrail add --slug task-2 --prompt "Second thing"
+claude "go"   # does task-1
+claude "go"   # does task-2
 ```
 
 ## Auto-Executing Deterministic Steps
@@ -261,7 +293,9 @@ interface.
 
 | Command | Purpose |
 |---------|---------|
+| `agentrail setup --name <n> --plan <p> [--domain <d>]` | Bootstrap: saga + CLAUDE.md + domain |
 | `agentrail init --name <name> --plan <text>` | Create a new saga |
+| `agentrail add --slug <s> --prompt <p> [--task-type <t>]` | Add a step (maintenance mode / ad-hoc) |
 | `agentrail next` | Show current step with skills and trajectories |
 | `agentrail begin` | Mark current step as in-progress |
 | `agentrail complete --summary <text> [flags]` | Complete step, record trajectory, advance |

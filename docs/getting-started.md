@@ -243,8 +243,32 @@ When all steps are done:
 
 - **More multi-step work**: start a new saga with `agentrail init`
 - **Quick one-off fix**: just use `claude` normally without agentrail
-- **Reopen**: edit `.agentrail/saga.toml`, set `status = "active"`,
-  then create new steps with `agentrail complete`
+- **Add more steps**: `agentrail add --slug fix-bug --prompt "Fix X"`
+  (auto-reopens the saga)
+
+## Maintenance Mode
+
+For ongoing work without a fixed endpoint (bug fixes, features,
+improvements), use maintenance mode:
+
+```bash
+# Just tell Claude what to do -- no pre-planning needed
+claude "fix the login timeout bug in auth.rs"
+claude "add dark mode to the settings page"
+claude "update all dependencies"
+```
+
+The agent creates the step itself via `agentrail add`, does the work,
+completes, and stops. Or pre-load a batch:
+
+```bash
+agentrail add --slug fix-123 --prompt "Fix login timeout"
+agentrail add --slug fix-124 --prompt "Fix mobile layout"
+claude "go"   # does fix-123
+claude "go"   # does fix-124
+```
+
+See `docs/maintenance-mode.md` for the full guide and CLAUDE.md template.
 
 See `docs/user-guide.md` for details.
 
