@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod domain;
 pub mod saga;
 pub mod session;

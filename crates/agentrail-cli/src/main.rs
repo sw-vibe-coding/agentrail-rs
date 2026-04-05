@@ -152,6 +152,12 @@ enum Commands {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Archive current saga to .agentrail-archive/ and clear .agentrail/
+    Archive {
+        /// Optional reason for archiving (stored in archive-reason.txt)
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -213,5 +219,8 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         Commands::Plan { update } => commands::plan::run(saga_path, update.as_deref()).map(|_| 0),
         Commands::History => commands::history::run(saga_path).map(|_| 0),
         Commands::Abort { reason } => commands::abort::run(saga_path, reason.as_deref()).map(|_| 0),
+        Commands::Archive { reason } => {
+            commands::archive::run(saga_path, reason.as_deref()).map(|_| 0)
+        }
     }
 }
