@@ -30,7 +30,7 @@ Every step records its trajectory (state, action, result, reward). On the next r
 
 **Phases 0-5 implemented.** The full ICRL loop is functional:
 
-- 13 CLI commands: `setup`, `init`, `add`, `status`, `next`, `begin`, `complete`, `plan`, `history`, `distill`, `run-loop`, `abort`, `help`
+- 16 CLI commands: `setup`, `init`, `add`, `status`, `next`, `begin`, `complete`, `plan`, `history`, `distill`, `run-loop`, `abort`, `archive`, `audit`, `snapshot`, `gen-agents-doc`
 - Maintenance mode: `agentrail add` for ad-hoc tasks, agents create steps from user messages
 - XSkill dual memory: skills (strategic workflow docs) + trajectories (per-run records)
 - ICRL injection: `next` shows skill procedures, failure modes, and past successful trajectories
@@ -39,7 +39,8 @@ Every step records its trajectory (state, action, result, reward). On the next r
 - Domain repos: register external skill/executor/validator repos
 - Shell executors and validators for deterministic step auto-execution
 - Orchestrator loop: `run-loop` auto-executes deterministic steps, pauses at agent steps
-- 41 integration tests, all passing
+- Recovery & diagnostics: `audit` compares git history to saga history and emits reconstruction commands; `snapshot` saves `.agentrail/` into the git object store as a safety net
+- 75 integration and unit tests, all passing
 
 ## Quick Start
 

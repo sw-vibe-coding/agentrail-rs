@@ -109,7 +109,15 @@ fn audit_matches_active_step_by_recorded_commit() {
     let h = commit(p, "a.txt", "step one work");
 
     init::run(p, "dev", "plan", false).unwrap();
-    add::run(p, "one", "do step one", "production", None, &[h.clone()]).unwrap();
+    add::run(
+        p,
+        "one",
+        "do step one",
+        "production",
+        None,
+        std::slice::from_ref(&h),
+    )
+    .unwrap();
 
     let report = store_audit::run(p, None).unwrap();
     assert_eq!(report.matched.len(), 1);
