@@ -5,6 +5,7 @@ pub mod audit;
 pub mod begin;
 pub mod complete;
 pub mod distill;
+pub mod gen_agents_doc;
 pub mod history;
 pub mod init;
 pub mod next;

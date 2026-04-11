@@ -169,14 +169,58 @@ enum Commands {
         reason: Option<String>,
     },
     /// Compare git history with saga history, report gaps
+    ///
+    /// Walks first-parent git history on the current branch and matches
+    /// commits to saga steps, either by the step's recorded commit hash
+    /// (exact) or by timestamp window (heuristic fallback for legacy steps).
+    /// Archived sagas' commits are treated as claimed and excluded from gap
+    /// analysis.
+    ///
+    /// Default output is a markdown report with four sections: matched,
+    /// orphan commits (no matching step), orphan steps (no matching commit),
+    /// and working-tree changes. With `--emit-commands`, prints a shell
+    /// script of suggested `agentrail add` lines for orphan commits,
+    /// pre-seeded from commit subjects. Review and edit the slugs and
+    /// prompts before running the script.
+    ///
+    /// Handles three cases:
+    ///   1. Active saga with gaps: emits `add` lines for orphan commits.
+    ///   2. No `.agentrail/` at all: emits `init --retroactive` followed by
+    ///      one `add` per historical commit, for bootstrapping an old repo.
+    ///   3. Clean: reports no gaps.
     Audit {
-        /// Limit to commits after this git revision (e.g. "HEAD~50", "v1.0")
+        /// Limit to commits after this git revision (e.g. "HEAD~50", "v1.0").
+        /// When omitted, scans all first-parent history on the current branch.
         #[arg(long)]
         since: Option<String>,
-        /// Emit a shell script of suggested `agentrail add` commands instead
-        /// of a human-readable report. Review before running.
+        /// Emit a shell script of suggested `agentrail add` / `agentrail init`
+        /// lines instead of a human-readable report. The script is a draft
+        /// meant for human or agent review before execution — slugs and
+        /// prompts are derived from commit subjects and usually need
+        /// rewording.
         #[arg(long)]
         emit_commands: bool,
+    },
+    /// Write AGENTS.example.md — an agent instructions template for agentrail
+    ///
+    /// Produces a self-contained Markdown file with the full session
+    /// protocol, the rules for handling `.agentrail/`, and recovery
+    /// guidance using `agentrail audit`. Drop it into any project that uses
+    /// agentrail (rename to AGENTS.md, CLAUDE.md, .cursorrules, etc.) so
+    /// that Claude Code, opencode, Cursor, and similar agents know how to
+    /// use agentrail correctly.
+    ///
+    /// By default writes `AGENTS.example.md` in the project directory; use
+    /// `--output` to pick a different path. Refuses to overwrite an
+    /// existing file unless `--force` is passed.
+    GenAgentsDoc {
+        /// Path to write the template to (default: AGENTS.example.md in
+        /// the project directory)
+        #[arg(long)]
+        output: Option<String>,
+        /// Overwrite the target file if it already exists
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -264,6 +308,13 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
                 emit_commands,
             };
             commands::audit::run(saga_path, &args).map(|_| 0)
+        }
+        Commands::GenAgentsDoc { output, force } => {
+            let args = commands::gen_agents_doc::GenArgs {
+                output: output.as_deref(),
+                force,
+            };
+            commands::gen_agents_doc::run(saga_path, &args).map(|_| 0)
         }
     }
 }
