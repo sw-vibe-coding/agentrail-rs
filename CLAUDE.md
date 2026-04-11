@@ -5,15 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test Commands
 
 ```bash
-cargo test --workspace                    # run all tests
-cargo test -p agentrail-store             # run tests for one crate
-cargo test -p agentrail-store saga        # run tests matching "saga" in one crate
-cargo clippy --workspace -- -D warnings   # lint (treats warnings as errors)
-cargo fmt --check                         # format check
-cargo fmt                                 # auto-format
+cargo test --workspace                                 # run all tests
+cargo test -p agentrail-store                          # run tests for one crate
+cargo test -p agentrail-store saga                     # run tests matching "saga" in one crate
+cargo clippy --workspace --all-targets -- -D warnings  # lint (treats warnings as errors)
+cargo fmt --check                                      # format check
+cargo fmt                                              # auto-format
 ```
 
-Pre-commit gate (all must pass): `cargo test && cargo clippy -- -D warnings && cargo fmt --check`
+Pre-commit gate (all must pass): `cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --check`
+
+`--all-targets` is required — without it, clippy skips test and example
+targets, so test-only lints (e.g., `clippy::cloned_ref_to_slice_refs`)
+will slip through local gates and fail later in CI or on the next run.
 
 ## Two-Layer Architecture
 

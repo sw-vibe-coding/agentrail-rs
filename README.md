@@ -166,18 +166,22 @@ Evolved from [avoid-compaction](https://github.com/softwarewrighter/avoid-compac
 ## Development
 
 ```bash
-cargo test --workspace                    # run all tests
-cargo test -p agentrail-store             # run tests for one crate
-cargo test -p agentrail-store saga        # run tests matching a pattern
-cargo clippy --workspace -- -D warnings   # lint
-cargo fmt --check                         # format check
+cargo test --workspace                                 # run all tests
+cargo test -p agentrail-store                          # run tests for one crate
+cargo test -p agentrail-store saga                     # run tests matching a pattern
+cargo clippy --workspace --all-targets -- -D warnings  # lint (covers test targets too)
+cargo fmt --check                                      # format check
 ```
 
 Pre-commit gate (all must pass):
 
 ```bash
-cargo test && cargo clippy -- -D warnings && cargo fmt --check
+cargo test --workspace && \
+  cargo clippy --workspace --all-targets -- -D warnings && \
+  cargo fmt --check
 ```
+
+`--all-targets` matters: without it, clippy skips test and example targets and test-only lints slip through.
 
 TDD workflow: write failing test first, implement minimum logic, refactor.
 
