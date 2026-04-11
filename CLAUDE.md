@@ -70,6 +70,26 @@ All runtime data in `.agentrail/` (never `.avoid-compaction/`):
 - `docs/implementation-plan.md` -- Phased roadmap (replaces continue-from-bootstrap.md phases)
 - `docs/continue-from-bootstrap.md` -- Original bootstrapping handoff (historical)
 
+## Handling `.agentrail/` in git (CRITICAL)
+
+The `.agentrail/` directory is the durable record of saga/step history. Treat
+it like source code:
+
+- **Always track `.agentrail/` in git.** Never add it to `.gitignore`. If you
+  inherit a repo that has it ignored, that is a bug — unignore it.
+- **Commit step artifacts as each step completes.** `agentrail complete`
+  records the current `HEAD` hash into the step's `commits` field, so the
+  commit must happen *before* `agentrail complete` for the linkage to be
+  accurate. Order: work -> `git add` + `git commit` -> `agentrail complete`.
+- **Never edit or delete files under `.agentrail/` by hand.** Always go
+  through `agentrail` commands (`init`, `add`, `complete`, `archive`, etc.).
+  Direct `rm`/`rm -rf` on untracked step files is unrecoverable — git reflog
+  cannot restore what was never added.
+- If you accidentally end up with gaps, `agentrail audit` compares git history
+  against saga history and emits a shell script of `agentrail add` lines to
+  reconstruct the missing steps. `agentrail audit --emit-commands` for the
+  script; review and edit before running.
+
 ## Development Practices
 
 - TDD: write failing test first, implement minimum logic, refactor.

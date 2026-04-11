@@ -44,6 +44,7 @@ name = "agentrail-store"
 version = "0.1.0"
 dependencies = [
  "agentrail-core",
+ "chrono",
  "dirs",
  "serde",
  "serde_json",

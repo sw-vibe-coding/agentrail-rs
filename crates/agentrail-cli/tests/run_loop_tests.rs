@@ -28,7 +28,7 @@ fn register_mock_domain(saga_dir: &std::path::Path) {
 #[test]
 fn run_loop_pauses_at_production_step() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "test", "plan").unwrap();
+    init::run(tmp.path(), "test", "plan", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Create a production step (should pause)
@@ -56,7 +56,7 @@ fn run_loop_pauses_at_production_step() {
 #[test]
 fn run_loop_executes_deterministic_step() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "test", "plan").unwrap();
+    init::run(tmp.path(), "test", "plan", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
     register_mock_domain(&saga_dir);
 
@@ -111,7 +111,7 @@ fn run_loop_executes_deterministic_step() {
 #[test]
 fn run_loop_chains_deterministic_then_pauses_at_production() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "test", "plan").unwrap();
+    init::run(tmp.path(), "test", "plan", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
     register_mock_domain(&saga_dir);
 
@@ -172,7 +172,7 @@ fn run_loop_chains_deterministic_then_pauses_at_production() {
 #[test]
 fn run_loop_echo_executor() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "test", "plan").unwrap();
+    init::run(tmp.path(), "test", "plan", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
     register_mock_domain(&saga_dir);
 

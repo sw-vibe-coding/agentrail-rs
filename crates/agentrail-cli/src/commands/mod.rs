@@ -1,6 +1,7 @@
 pub mod abort;
 pub mod add;
 pub mod archive;
+pub mod audit;
 pub mod begin;
 pub mod complete;
 pub mod distill;

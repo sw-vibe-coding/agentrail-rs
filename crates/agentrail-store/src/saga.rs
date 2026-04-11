@@ -49,6 +49,7 @@ pub fn init_saga(path: &Path, name: &str, plan_content: &str) -> Result<()> {
         current_step: 0,
         created_at: agentrail_core::timestamp_iso(),
         plan_file: plan_file.clone(),
+        retroactive: false,
     };
 
     save_saga(path, &config)?;

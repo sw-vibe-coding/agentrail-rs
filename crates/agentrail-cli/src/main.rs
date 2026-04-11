@@ -61,6 +61,11 @@ enum Commands {
         /// Plan: file path, literal text, or "-" for stdin
         #[arg(long)]
         plan: String,
+        /// Mark this saga as retroactive (reconstructed from prior git history).
+        /// `agentrail audit` will treat its commits as claimed when looking
+        /// for gaps in future sagas.
+        #[arg(long)]
+        retroactive: bool,
     },
     /// Bootstrap a project: create saga, CLAUDE.md, and register domain
     Setup {
@@ -88,6 +93,11 @@ enum Commands {
         /// Task type for skill/trajectory lookup
         #[arg(long)]
         task_type: Option<String>,
+        /// Git commit hash(es) to associate with this step. Repeat the flag
+        /// for multiple commits. Used by `agentrail audit` to link steps to
+        /// their commits, primarily for retroactive reconstruction.
+        #[arg(long = "commit")]
+        commits: Vec<String>,
     },
     /// Show current saga state
     Status,
@@ -158,6 +168,16 @@ enum Commands {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Compare git history with saga history, report gaps
+    Audit {
+        /// Limit to commits after this git revision (e.g. "HEAD~50", "v1.0")
+        #[arg(long)]
+        since: Option<String>,
+        /// Emit a shell script of suggested `agentrail add` commands instead
+        /// of a human-readable report. Review before running.
+        #[arg(long)]
+        emit_commands: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -173,7 +193,11 @@ fn main() -> ExitCode {
 
 fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::error::Result<u8> {
     match command {
-        Commands::Init { name, plan } => commands::init::run(saga_path, &name, &plan).map(|_| 0),
+        Commands::Init {
+            name,
+            plan,
+            retroactive,
+        } => commands::init::run(saga_path, &name, &plan, retroactive).map(|_| 0),
         Commands::Setup { name, plan, domain } => {
             commands::setup::run(saga_path, &name, &plan, domain.as_deref()).map(|_| 0)
         }
@@ -182,7 +206,16 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             prompt,
             role,
             task_type,
-        } => commands::add::run(saga_path, &slug, &prompt, &role, task_type.as_deref()).map(|_| 0),
+            commits,
+        } => commands::add::run(
+            saga_path,
+            &slug,
+            &prompt,
+            &role,
+            task_type.as_deref(),
+            &commits,
+        )
+        .map(|_| 0),
         Commands::Status => commands::status::run(saga_path).map(|_| 0),
         Commands::Next => commands::next::run(saga_path),
         Commands::Begin => commands::begin::run(saga_path).map(|_| 0),
@@ -221,6 +254,16 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         Commands::Abort { reason } => commands::abort::run(saga_path, reason.as_deref()).map(|_| 0),
         Commands::Archive { reason } => {
             commands::archive::run(saga_path, reason.as_deref()).map(|_| 0)
+        }
+        Commands::Audit {
+            since,
+            emit_commands,
+        } => {
+            let args = commands::audit::AuditArgs {
+                since: since.as_deref(),
+                emit_commands,
+            };
+            commands::audit::run(saga_path, &args).map(|_| 0)
         }
     }
 }

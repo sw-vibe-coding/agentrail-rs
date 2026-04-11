@@ -11,6 +11,7 @@ pub fn run(
     prompt_raw: &str,
     role: &str,
     task_type: Option<&str>,
+    commits: &[String],
 ) -> Result<()> {
     let config = saga::load_saga(saga_path)?;
     let saga_dir = saga::saga_dir(saga_path);
@@ -31,7 +32,7 @@ pub fn run(
     };
 
     let description = agentrail_core::truncate(&prompt, 80);
-    step::create_step(&step::CreateStepParams {
+    let step_dir = step::create_step(&step::CreateStepParams {
         saga_dir: &saga_dir,
         number: new_number,
         slug,
@@ -42,6 +43,16 @@ pub fn run(
         task_type,
         job_spec: None,
     })?;
+
+    if !commits.is_empty() {
+        let mut step_cfg = step::load_step(&step_dir)?;
+        for h in commits {
+            if !step_cfg.commits.contains(h) {
+                step_cfg.commits.push(h.clone());
+            }
+        }
+        step::save_step(&step_dir, &step_cfg)?;
+    }
 
     // If saga has no current step or current step is complete, advance
     if config.current_step == 0 || config.current_step < new_number {

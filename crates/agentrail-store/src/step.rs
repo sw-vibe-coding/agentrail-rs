@@ -80,6 +80,7 @@ pub fn create_step(p: &CreateStepParams<'_>) -> Result<PathBuf> {
         job_spec: p.job_spec.clone(),
         packet_file: None,
         task_type: task_type.map(|s| s.to_string()),
+        commits: Vec::new(),
     };
 
     save_step(&dir, &config)?;

@@ -14,6 +14,10 @@ pub struct SagaConfig {
     pub current_step: u32,
     pub created_at: String,
     pub plan_file: String,
+    /// Saga reconstructed after-the-fact from git history. `agentrail audit`
+    /// skips commits claimed by retroactive sagas when looking for gaps.
+    #[serde(default)]
+    pub retroactive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,6 +62,10 @@ pub struct StepConfig {
     /// Task type key for skill/experience retrieval (e.g., "tts", "ffmpeg-concat")
     #[serde(default)]
     pub task_type: Option<String>,
+    /// Git commit hashes recorded for this step (populated by `complete`).
+    /// Used by `agentrail audit` to detect gaps between saga and git history.
+    #[serde(default)]
+    pub commits: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

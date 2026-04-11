@@ -6,7 +6,7 @@ use tempfile::tempdir;
 #[test]
 fn init_creates_saga() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "my-feature", "Build a thing").unwrap();
+    init::run(tmp.path(), "my-feature", "Build a thing", false).unwrap();
     assert!(saga::saga_exists(tmp.path()));
 
     let config = saga::load_saga(tmp.path()).unwrap();
@@ -16,8 +16,8 @@ fn init_creates_saga() {
 #[test]
 fn init_fails_when_saga_exists() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
-    assert!(init::run(tmp.path(), "s", "p").is_err());
+    init::run(tmp.path(), "s", "p", false).unwrap();
+    assert!(init::run(tmp.path(), "s", "p", false).is_err());
 }
 
 #[test]
@@ -30,7 +30,7 @@ fn next_returns_2_when_no_saga() {
 #[test]
 fn next_returns_0_after_init() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "plan").unwrap();
+    init::run(tmp.path(), "s", "plan", false).unwrap();
     let code = next::run(tmp.path()).unwrap();
     assert_eq!(code, 0);
 }
@@ -38,7 +38,7 @@ fn next_returns_0_after_init() {
 #[test]
 fn next_returns_1_when_complete() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "plan").unwrap();
+    init::run(tmp.path(), "s", "plan", false).unwrap();
 
     let mut config = saga::load_saga(tmp.path()).unwrap();
     config.status = SagaStatus::Completed;
@@ -51,7 +51,7 @@ fn next_returns_1_when_complete() {
 #[test]
 fn status_runs_after_init() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "my-saga", "plan").unwrap();
+    init::run(tmp.path(), "my-saga", "plan", false).unwrap();
     status::run(tmp.path()).unwrap();
 }
 
@@ -60,7 +60,7 @@ fn full_workflow() {
     let tmp = tempdir().unwrap();
 
     // Init
-    init::run(tmp.path(), "test-saga", "The master plan").unwrap();
+    init::run(tmp.path(), "test-saga", "The master plan", false).unwrap();
 
     // Complete step 0, create step 1
     let args = complete::CompleteArgs {
@@ -120,7 +120,7 @@ fn full_workflow() {
 #[test]
 fn plan_view_and_update() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "Original plan").unwrap();
+    init::run(tmp.path(), "s", "Original plan", false).unwrap();
 
     // View
     plan::run(tmp.path(), None).unwrap();
@@ -135,7 +135,7 @@ fn plan_view_and_update() {
 #[test]
 fn history_shows_steps() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
 
     let args = complete::CompleteArgs {
         summary: Some("setup"),
@@ -158,7 +158,7 @@ fn history_shows_steps() {
 #[test]
 fn abort_blocks_step() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
 
     let args = complete::CompleteArgs {
         summary: Some("setup"),
@@ -186,7 +186,7 @@ fn abort_blocks_step() {
 #[test]
 fn complete_with_planned_steps() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
 
     let args = complete::CompleteArgs {
         summary: Some("setup"),
@@ -217,7 +217,7 @@ fn complete_with_planned_steps() {
 #[test]
 fn complete_with_task_type_and_next_shows_trajectories() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Pre-populate trajectories for the "tts" task type
@@ -260,7 +260,7 @@ fn complete_with_task_type_and_next_shows_trajectories() {
 #[test]
 fn next_shows_skill_and_trajectories_together() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Save a skill doc for "tts"
@@ -321,7 +321,7 @@ fn next_shows_skill_and_trajectories_together() {
 #[test]
 fn complete_records_trajectory_with_reward() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Create step 1 with task_type
@@ -373,7 +373,7 @@ fn complete_records_trajectory_with_reward() {
 #[test]
 fn complete_records_failure_trajectory() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Create step 1 with task_type
@@ -418,7 +418,7 @@ fn complete_records_failure_trajectory() {
 #[test]
 fn distill_generates_skill_from_trajectories() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Pre-populate trajectories
@@ -465,7 +465,7 @@ fn distill_generates_skill_from_trajectories() {
 #[test]
 fn full_loop_complete_with_trajectory_then_distill_then_next() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Step 0 -> Step 1 (tts)
@@ -515,7 +515,7 @@ fn full_loop_complete_with_trajectory_then_distill_then_next() {
 #[test]
 fn complete_advances_to_existing_planned_step() {
     let tmp = tempdir().unwrap();
-    init::run(tmp.path(), "s", "p").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
     let saga_dir = saga::saga_dir(tmp.path());
 
     // Create step 1 with planned steps 2 and 3

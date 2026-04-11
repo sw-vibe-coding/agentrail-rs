@@ -1,6 +1,6 @@
 use agentrail_core::error::Result;
 use agentrail_core::{SagaStatus, StepRole, StepStatus, Trajectory};
-use agentrail_store::{saga, session, step, trajectory};
+use agentrail_store::{git_history, saga, session, step, trajectory};
 use std::path::Path;
 
 pub struct CompleteArgs<'a> {
@@ -54,6 +54,15 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         }
 
         step::transition_step(&mut step_config, StepStatus::Completed)?;
+
+        // Record current HEAD so `agentrail audit` can link step <-> commit
+        // exactly. Idempotent: skip if the same hash is already recorded.
+        if let Some(head) = git_history::head_hash(saga_path)
+            && !step_config.commits.contains(&head)
+        {
+            step_config.commits.push(head);
+        }
+
         step::save_step(&step_dir, &step_config)?;
 
         if !summary_text.is_empty() {
