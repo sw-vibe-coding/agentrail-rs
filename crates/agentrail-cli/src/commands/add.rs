@@ -1,6 +1,6 @@
 use agentrail_core::StepRole;
 use agentrail_core::error::Result;
-use agentrail_store::{saga, step};
+use agentrail_store::{git_history, saga, step};
 use std::path::Path;
 
 /// Add a new step to the saga without completing the current one.
@@ -45,10 +45,23 @@ pub fn run(
     })?;
 
     if !commits.is_empty() {
+        // Resolve every passed reference to a full 40-char SHA so that
+        // `agentrail audit` can match steps against git history exactly.
+        // Short hashes, tags, and `HEAD~N` all work; bad refs fail loudly
+        // here instead of silently producing orphan commits later.
+        let mut resolved = Vec::with_capacity(commits.len());
+        for reference in commits {
+            let sha = git_history::resolve_commit(saga_path, reference)?;
+            if reference != &sha {
+                println!("Resolved '{reference}' -> {sha}");
+            }
+            resolved.push(sha);
+        }
+
         let mut step_cfg = step::load_step(&step_dir)?;
-        for h in commits {
-            if !step_cfg.commits.contains(h) {
-                step_cfg.commits.push(h.clone());
+        for sha in resolved {
+            if !step_cfg.commits.contains(&sha) {
+                step_cfg.commits.push(sha);
             }
         }
         step::save_step(&step_dir, &step_cfg)?;

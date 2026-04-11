@@ -78,18 +78,20 @@ fn init_retroactive_flag_persists() {
 }
 
 #[test]
-fn add_command_flag_records_commit_hash() {
+fn add_command_flag_records_full_commit_sha_from_full_ref() {
     let tmp = tempdir().unwrap();
     let p = tmp.path();
-    init::run(p, "s", "plan", false).unwrap();
+    init_repo(p);
+    let full = commit(p, "a.txt", "work");
 
+    init::run(p, "s", "plan", false).unwrap();
     add::run(
         p,
         "recovered",
         "did retroactive work",
         "production",
         None,
-        &["abc123def456".to_string()],
+        std::slice::from_ref(&full),
     )
     .unwrap();
 
@@ -97,8 +99,89 @@ fn add_command_flag_records_commit_hash() {
     let steps = step::list_steps(&saga_dir).unwrap();
     assert_eq!(steps.len(), 1);
     let cfg = &steps[0].1;
-    assert_eq!(cfg.commits, vec!["abc123def456".to_string()]);
+    assert_eq!(cfg.commits, vec![full]);
     assert_eq!(cfg.slug, "recovered");
+}
+
+#[test]
+fn add_command_flag_normalizes_short_hash_to_full_sha() {
+    let tmp = tempdir().unwrap();
+    let p = tmp.path();
+    init_repo(p);
+    let full = commit(p, "a.txt", "work");
+    let short = full[..8].to_string();
+
+    init::run(p, "s", "plan", false).unwrap();
+    add::run(
+        p,
+        "recovered",
+        "retroactive",
+        "production",
+        None,
+        std::slice::from_ref(&short),
+    )
+    .unwrap();
+
+    let saga_dir = saga::saga_dir(p);
+    let steps = step::list_steps(&saga_dir).unwrap();
+    let cfg = &steps[0].1;
+    assert_eq!(
+        cfg.commits,
+        vec![full],
+        "short hash should be normalized to the full 40-char SHA"
+    );
+}
+
+#[test]
+fn add_command_flag_rejects_unresolvable_commit_reference() {
+    let tmp = tempdir().unwrap();
+    let p = tmp.path();
+    init_repo(p);
+    commit(p, "a.txt", "work");
+
+    init::run(p, "s", "plan", false).unwrap();
+    let err = add::run(
+        p,
+        "recovered",
+        "retroactive",
+        "production",
+        None,
+        &["deadbeefdeadbeef".to_string()],
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("could not resolve commit reference"),
+        "got unexpected error: {err}"
+    );
+}
+
+#[test]
+fn audit_matches_active_step_after_add_normalizes_short_hash() {
+    let tmp = tempdir().unwrap();
+    let p = tmp.path();
+    init_repo(p);
+    let full = commit(p, "a.txt", "step work");
+    let short = full[..7].to_string();
+
+    init::run(p, "dev", "plan", false).unwrap();
+    add::run(
+        p,
+        "one",
+        "do step one",
+        "production",
+        None,
+        std::slice::from_ref(&short),
+    )
+    .unwrap();
+
+    // The regression from issue #1: before the fix, the step stored the
+    // short hash verbatim and audit reported the commit as an orphan.
+    let report = store_audit::run(p, None).unwrap();
+    assert_eq!(report.matched.len(), 1);
+    assert_eq!(report.matched[0].0.hash, full);
+    assert!(report.orphan_commits.is_empty());
+    assert!(!report.has_gaps());
 }
 
 #[test]

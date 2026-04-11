@@ -93,9 +93,14 @@ enum Commands {
         /// Task type for skill/trajectory lookup
         #[arg(long)]
         task_type: Option<String>,
-        /// Git commit hash(es) to associate with this step. Repeat the flag
-        /// for multiple commits. Used by `agentrail audit` to link steps to
-        /// their commits, primarily for retroactive reconstruction.
+        /// Git commit reference(s) to associate with this step. Accepts any
+        /// revision git rev-parse understands: full SHA, short SHA, tag,
+        /// `HEAD~N`, branch name, etc. References are resolved to their full
+        /// 40-char commit SHA at add time (via `git rev-parse --verify
+        /// <ref>^{commit}`) and stored canonically in `step.toml`, so
+        /// `agentrail audit` matches them exactly against git history.
+        /// Unresolvable references are rejected. Repeat the flag for
+        /// multiple commits.
         #[arg(long = "commit")]
         commits: Vec<String>,
     },

@@ -93,6 +93,47 @@ pub fn head_hash(repo_path: &Path) -> Option<String> {
     if s.is_empty() { None } else { Some(s) }
 }
 
+/// Resolve a commit reference (short hash, full hash, tag, `HEAD~N`, etc.)
+/// to its full 40-character commit SHA, using `git rev-parse --verify
+/// <ref>^{commit}`. The `^{commit}` peel ensures that tags and tree-ish
+/// references are dereferenced to their underlying commit; if the ref
+/// doesn't resolve to a commit, this returns an error rather than silently
+/// accepting e.g. a tree hash.
+///
+/// Errors if `repo_path` is not a git repo or if git cannot resolve the
+/// reference.
+pub fn resolve_commit(repo_path: &Path, reference: &str) -> Result<String> {
+    if !is_git_repo(repo_path) {
+        return Err(Error::Other(format!(
+            "{} is not inside a git repository; cannot resolve commit reference '{}'",
+            repo_path.display(),
+            reference
+        )));
+    }
+    let spec = format!("{reference}^{{commit}}");
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("--verify")
+        .arg("--quiet")
+        .arg(&spec)
+        .output()
+        .map_err(|e| Error::Other(format!("failed to run git rev-parse: {e}")))?;
+    if !output.status.success() {
+        return Err(Error::Other(format!(
+            "could not resolve commit reference '{reference}': git rev-parse returned no match"
+        )));
+    }
+    let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if sha.len() != 40 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(Error::Other(format!(
+            "git rev-parse returned an unexpected value for '{reference}': {sha}"
+        )));
+    }
+    Ok(sha)
+}
+
 /// Return the list of uncommitted paths (staged + unstaged + untracked) in
 /// porcelain format. Empty when the tree is clean or not a git repo.
 pub fn uncommitted_paths(repo_path: &Path) -> Vec<String> {
