@@ -12,4 +12,5 @@ pub mod next;
 pub mod plan;
 pub mod run_loop;
 pub mod setup;
+pub mod snapshot;
 pub mod status;

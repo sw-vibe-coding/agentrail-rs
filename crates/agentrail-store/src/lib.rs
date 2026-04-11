@@ -5,5 +5,6 @@ pub mod git_history;
 pub mod saga;
 pub mod session;
 pub mod skill;
+pub mod snapshot;
 pub mod step;
 pub mod trajectory;

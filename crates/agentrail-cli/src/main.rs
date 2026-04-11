@@ -201,6 +201,31 @@ enum Commands {
         #[arg(long)]
         emit_commands: bool,
     },
+    /// Save a point-in-time copy of .agentrail/ into the git object store
+    ///
+    /// Belt-and-suspenders recovery aid. Creates a proper git commit under
+    /// `refs/agentrail/snapshots/<timestamp>` containing a snapshot of
+    /// `.agentrail/` (and `.agentrail-archive/` if present), then points a
+    /// ref at it so the blobs are reachable and survive `git gc`. The
+    /// user's real `.git/index` is never touched — snapshot operations run
+    /// against a throwaway index via `GIT_INDEX_FILE`, so there are no
+    /// staged-file side effects and no races with pre-commit hooks.
+    ///
+    /// Intended use: run this manually before a risky agent operation, or
+    /// after creating `.agentrail/` files you haven't yet committed, so
+    /// that a stray `rm -rf` still has something to recover from. This is
+    /// NOT a substitute for normal git tracking — it's a safety net for
+    /// files that are not yet staged.
+    ///
+    /// Restore from a snapshot with a normal git command:
+    ///   git restore --source=<ref> -- .agentrail .agentrail-archive
+    ///
+    /// `agentrail snapshot --list` shows existing snapshot refs.
+    Snapshot {
+        /// List existing snapshot refs instead of taking a new one
+        #[arg(long)]
+        list: bool,
+    },
     /// Write AGENTS.example.md — an agent instructions template for agentrail
     ///
     /// Produces a self-contained Markdown file with the full session
@@ -315,6 +340,10 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
                 force,
             };
             commands::gen_agents_doc::run(saga_path, &args).map(|_| 0)
+        }
+        Commands::Snapshot { list } => {
+            let args = commands::snapshot::SnapshotArgs { list };
+            commands::snapshot::run(saga_path, &args).map(|_| 0)
         }
     }
 }

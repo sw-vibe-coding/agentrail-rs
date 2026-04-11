@@ -168,6 +168,33 @@ commits are claimed.
 
 Going forward from there, run new sagas normally.
 
+## Safety net: `agentrail snapshot`
+
+If you have files under `.agentrail/` that are not yet committed and
+you're about to do something risky (a big agent run, a rebase, cleaning
+up untracked files), run:
+
+```bash
+agentrail snapshot
+```
+
+This creates a git commit under `refs/agentrail/snapshots/<timestamp>`
+containing a copy of `.agentrail/` and `.agentrail-archive/`. The user's
+real git index is not touched — it uses a throwaway temp index under the
+hood. The snapshot survives `git gc` because a named ref holds it.
+
+Restore from a snapshot with a normal git command:
+
+```bash
+git restore --source=refs/agentrail/snapshots/<timestamp> \
+    -- .agentrail .agentrail-archive
+```
+
+List existing snapshots with `agentrail snapshot --list`.
+
+This is a safety net, not a replacement for committing. Commit your
+work normally — use snapshot only as belt-and-suspenders insurance.
+
 ---
 
 ## Quick reference
@@ -184,6 +211,8 @@ Going forward from there, run new sagas normally.
 | `agentrail abort --reason "..."` | Mark current step as blocked |
 | `agentrail archive --reason "..."` | Close out a saga and start fresh |
 | `agentrail audit` | Diagnose saga-vs-git gaps |
+| `agentrail snapshot` | Save a safety-net copy of `.agentrail/` into the git object store (opt-in) |
+| `agentrail snapshot --list` | List existing snapshot refs |
 
 ## What not to do
 
