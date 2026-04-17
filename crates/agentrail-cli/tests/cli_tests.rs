@@ -627,7 +627,7 @@ fn insert_slots_bugfix_between_pending_steps() {
 }
 
 #[test]
-fn insert_adjusts_cursor_when_it_falls_in_shift_range() {
+fn insert_preempts_cursor_when_new_step_lands_ahead() {
     let tmp = tempdir().unwrap();
     init::run(tmp.path(), "s", "p", false).unwrap();
 
@@ -646,7 +646,7 @@ fn insert_adjusts_cursor_when_it_falls_in_shift_range() {
     };
     complete::run(tmp.path(), &args).unwrap();
 
-    // Complete step 1 so the cursor advances to 2.
+    // Complete step 1 so the cursor advances to 2 (feat-b).
     begin::run(tmp.path()).unwrap();
     let args2 = complete::CompleteArgs {
         summary: Some("done a"),
@@ -664,12 +664,57 @@ fn insert_adjusts_cursor_when_it_falls_in_shift_range() {
     complete::run(tmp.path(), &args2).unwrap();
     assert_eq!(saga::load_saga(tmp.path()).unwrap().current_step, 2);
 
-    // Insert after 1 -- feat-b shifts from 2 to 3, cursor should follow.
+    // Insert after 1 -- a blocker lands at position 2, ahead of the cursor.
+    // Focus should follow the new step; feat-b shifts to 3 but is no longer
+    // the focused slot.
     insert::run(tmp.path(), 1, "hotfix", "fix bug", "production", None).unwrap();
 
     let cfg = saga::load_saga(tmp.path()).unwrap();
-    // Cursor follows feat-b (which was at 2, now at 3).
-    assert_eq!(cfg.current_step, 3);
+    assert_eq!(cfg.current_step, 2);
+
+    let saga_dir = saga::saga_dir(tmp.path());
+    let steps = step::list_steps(&saga_dir).unwrap();
+    let numbered: Vec<(u32, String)> = steps
+        .iter()
+        .map(|(_, s)| (s.number, s.slug.clone()))
+        .collect();
+    assert_eq!(
+        numbered,
+        vec![
+            (1, "feat-a".into()),
+            (2, "hotfix".into()),
+            (3, "feat-b".into()),
+        ]
+    );
+}
+
+#[test]
+fn insert_queues_behind_cursor_without_touching_focus() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("feat-a"),
+        next_prompt: Some("first"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec!["feat-b: second".to_string()],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().current_step, 1);
+
+    // Insert after 2 -- new step lands at position 3, behind the cursor.
+    // Cursor stays on feat-a at position 1.
+    insert::run(tmp.path(), 2, "later", "do later", "production", None).unwrap();
+
+    let cfg = saga::load_saga(tmp.path()).unwrap();
+    assert_eq!(cfg.current_step, 1);
 }
 
 #[test]

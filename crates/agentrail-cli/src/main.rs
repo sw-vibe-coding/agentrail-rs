@@ -178,9 +178,14 @@ enum Commands {
     /// git-tracked history.
     ///
     /// Pass `--after 0` to prepend at position 1 (only works if step 1 is
-    /// pending). The saga cursor follows its step by identity, so if you
-    /// are mid-way through the saga the `current_step` adjusts with the
-    /// shift.
+    /// pending).
+    ///
+    /// Cursor semantic (preemption): if the new step lands at or before
+    /// the current cursor, focus follows the new arrival — the inserted
+    /// step becomes `current_step` and the previously focused step is
+    /// pushed to `current_step + 1`. This matches the "drop in a blocker"
+    /// use case. If the new step lands behind the cursor, focus is
+    /// unchanged and the new step is queued as future work.
     Insert {
         /// Position to insert after (0 prepends). The new step becomes N+1.
         #[arg(long)]
@@ -202,9 +207,13 @@ enum Commands {
     ///
     /// Renumbers the source step and shifts the intervening steps by one
     /// in the opposite direction. Refuses if the source or any intervening
-    /// step is `Completed`. The saga cursor follows its step by identity:
-    /// if it pointed at the moved step it now points at `--to`; if it
-    /// pointed at an intervening step it adjusts by one.
+    /// step is `Completed`.
+    ///
+    /// Cursor semantic: if the cursor was pointing at the moved step it
+    /// follows to `--to`. Preemption — if the moved step was behind the
+    /// cursor (`from > current_step`) and lands at or ahead of the
+    /// cursor's new slot, focus follows the moved step. Otherwise the
+    /// cursor tracks the intervening shift by identity.
     Reorder {
         /// Source step number
         from: u32,

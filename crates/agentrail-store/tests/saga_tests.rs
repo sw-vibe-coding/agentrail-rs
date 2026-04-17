@@ -555,27 +555,32 @@ fn move_step_no_op_when_from_equals_to() {
 }
 
 #[test]
-fn cursor_after_shift_moves_when_in_range() {
-    // Insert at position 2 (shift_tail from=2, delta=+1): cursor 3 -> 4.
-    assert_eq!(saga::cursor_after_shift(3, 2, 1), 4);
-    // Cursor before shift range is untouched.
-    assert_eq!(saga::cursor_after_shift(1, 2, 1), 1);
-    // No cursor set.
-    assert_eq!(saga::cursor_after_shift(0, 2, 1), 0);
-    // Cursor exactly at `from` moves.
-    assert_eq!(saga::cursor_after_shift(2, 2, 1), 3);
+fn cursor_after_insert_preempts_when_new_step_at_or_before_cursor() {
+    // Preemption: new step lands ahead of the cursor -> focus follows.
+    assert_eq!(saga::cursor_after_insert(3, 2), 2);
+    // New step at the cursor's slot also preempts.
+    assert_eq!(saga::cursor_after_insert(2, 2), 2);
+    // New step queued behind cursor -> cursor unchanged.
+    assert_eq!(saga::cursor_after_insert(1, 4), 1);
+    // Unset cursor stays unset (even for a leading insert).
+    assert_eq!(saga::cursor_after_insert(0, 1), 0);
 }
 
 #[test]
-fn cursor_after_move_tracks_identity() {
+fn cursor_after_move_identity_and_preemption() {
     // Cursor pointing at the moved step follows it.
     assert_eq!(saga::cursor_after_move(2, 2, 4), 4);
-    // Cursor in the forward-moved range shifts -1.
+    // Cursor in the forward-moved range shifts -1 (step moved behind cursor).
     assert_eq!(saga::cursor_after_move(3, 2, 4), 2);
-    // Cursor in the backward-moved range shifts +1.
-    assert_eq!(saga::cursor_after_move(2, 4, 1), 3);
-    // Cursor outside the range is untouched.
+    // Preemption: backward move crosses over the cursor -> focus follows.
+    assert_eq!(saga::cursor_after_move(2, 4, 1), 1);
+    // Cursor outside the range is untouched (moved step stays behind cursor).
     assert_eq!(saga::cursor_after_move(5, 2, 4), 5);
+    // Backward move: moved step still lands behind the cursor — no preemption.
+    assert_eq!(saga::cursor_after_move(2, 5, 4), 2);
+    // Backward move where the moved step crosses over the cursor's shifted
+    // slot — preemption wins even though the cursor shifts forward too.
+    assert_eq!(saga::cursor_after_move(5, 7, 4), 4);
     // No-op.
     assert_eq!(saga::cursor_after_move(3, 3, 3), 3);
     // Unset cursor.

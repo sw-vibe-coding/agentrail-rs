@@ -337,14 +337,20 @@ without abandoning it:
 
 Slot a new pending step in at position N+1. Every pending/in-progress
 step with a higher number shifts up by one (both `step.toml` `number`
-and the `NNN-slug` directory name are updated). The saga cursor follows
-its step by identity, so if you are currently mid-saga you end up
-pointing at the same step after the shift.
+and the `NNN-slug` directory name are updated).
+
+**Cursor preemption.** If the new step lands at or before the current
+cursor, the cursor jumps to the new step and the previously focused
+step is pushed to `current_step + 1`. Running `agentrail next` after
+the insert surfaces the blocker, not the step it interrupted. If the
+new step lands behind the cursor, the cursor is unchanged and the new
+step is queued as future work.
 
 ```bash
-# Found a blocker before step 3. Insert a fix before it.
-agentrail insert --after 2 --slug hotfix-crash \
+# Found a blocker before the current step. Insert ahead and take focus.
+agentrail insert --after 1 --slug hotfix-crash \
   --prompt "Reproduce and fix the crash from issue #42"
+# agentrail next now points at hotfix-crash.
 ```
 
 **Completed steps never shift.** The operation refuses if any step in
@@ -356,6 +362,11 @@ git-tracked history.
 Renumber an existing pending/in-progress step to a new position.
 Intervening steps shift by one in the opposite direction. Completed
 steps in the swept range cause the move to be rejected.
+
+**Cursor preemption.** If the moved step was behind the cursor
+(`N > current_step`) and lands at or ahead of the cursor's new slot,
+focus follows the moved step — same "promote a blocker" feel as
+`insert`. Otherwise the cursor tracks its own step by identity.
 
 ```bash
 # Decided step 5 should actually go earlier.

@@ -55,7 +55,11 @@ Dependency flow: `cli -> store, exec, validate -> core`
 - **Mid-saga editing**: `agentrail insert --after N`, `agentrail reorder N --to M`,
   and `agentrail reopen N` let an agent adjust the saga when a surprise
   lands. All three refuse to touch completed steps: completed steps
-  never renumber, so git-tracked history stays stable.
+  never renumber, so git-tracked history stays stable. `insert` and
+  `reorder` apply **cursor preemption** — if the new/moved step lands
+  at or ahead of the current cursor, focus follows it so `agentrail next`
+  surfaces the blocker before the preempted step. Steps placed behind
+  the cursor are queued without disturbing focus.
 - **Domain repos**: per-domain knowledge (skills, experiences, executors, validators) in separate repos. See `docs/domain-repos.md`.
 
 ## Storage Layout

@@ -41,21 +41,28 @@ pub fn run(
 
     let new_dir = step::insert_after(after, &params)?;
 
-    let new_current = saga::cursor_after_shift(config.current_step, after + 1, 1);
-    if new_current != config.current_step {
+    let new_number = after + 1;
+    let old_current = config.current_step;
+    let new_current = saga::cursor_after_insert(old_current, new_number);
+    let preempted = new_current == new_number && old_current != 0 && old_current != new_number;
+    if new_current != old_current {
         config.current_step = new_current;
     }
-    // Inserting new work flips a completed saga back to active.
     if config.status == agentrail_core::SagaStatus::Completed {
         config.status = agentrail_core::SagaStatus::Active;
     }
     saga::save_saga(saga_path, &config)?;
 
-    let new_number = after + 1;
     println!(
         "Inserted step {:03}-{} (shifted later steps up).",
         new_number, slug
     );
+    if preempted {
+        println!(
+            "Focus moved to step {:03}-{} (preempted previous cursor at step {:03}).",
+            new_number, slug, old_current
+        );
+    }
     let _ = new_dir;
     Ok(())
 }

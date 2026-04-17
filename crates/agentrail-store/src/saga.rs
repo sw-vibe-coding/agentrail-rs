@@ -2,21 +2,35 @@ use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaConfig, SagaStatus};
 use std::path::{Path, PathBuf};
 
-/// Adjust the saga cursor after a tail-shift starting at `from`.
+/// Adjust the saga cursor after `agentrail insert` places a new step at
+/// `new_step`.
 ///
-/// If the cursor points at a step that got renumbered, it follows that step
-/// to its new number. Used by `agentrail insert`.
-pub fn cursor_after_shift(current: u32, from: u32, delta: i32) -> u32 {
-    if current == 0 || current < from {
-        return current;
+/// Preemption semantic: if the inserted step lands at or before the current
+/// cursor, focus follows the new arrival (the cursor "sees" the blocker
+/// first). Otherwise the cursor's original step is unaffected — insert only
+/// shifts steps at positions ≥ `new_step`, so a cursor earlier than
+/// `new_step` keeps its number without needing to track identity.
+pub fn cursor_after_insert(current: u32, new_step: u32) -> u32 {
+    if current == 0 {
+        return 0;
     }
-    let shifted = current as i64 + delta as i64;
-    shifted.max(0) as u32
+    if new_step <= current {
+        new_step
+    } else {
+        current
+    }
 }
 
-/// Adjust the saga cursor after a move_step operation. The cursor follows
-/// the step by identity: if it was pointing at `from`, it now points at
-/// `to`. Otherwise, it shifts with the intervening range.
+/// Adjust the saga cursor after a move_step operation.
+///
+/// Cases (in order):
+/// 1. Cursor was on the moved step → follows it to `to` (identity).
+/// 2. Preemption: the moved step was behind the cursor (`from > current`)
+///    and now lands at or ahead of the cursor's identity-shifted slot.
+///    Focus jumps to the new arrival at `to`. Only backward moves can
+///    trigger preemption — a forward move from `from > current` leaves
+///    `to > from > current`, so the moved step stays behind.
+/// 3. Otherwise, the cursor tracks the intervening shift by identity.
 pub fn cursor_after_move(current: u32, from: u32, to: u32) -> u32 {
     if current == 0 || from == to {
         return current;
@@ -24,7 +38,7 @@ pub fn cursor_after_move(current: u32, from: u32, to: u32) -> u32 {
     if current == from {
         return to;
     }
-    if from < to {
+    let identity = if from < to {
         if current > from && current <= to {
             current - 1
         } else {
@@ -34,7 +48,11 @@ pub fn cursor_after_move(current: u32, from: u32, to: u32) -> u32 {
         current + 1
     } else {
         current
+    };
+    if from > current && to <= identity {
+        return to;
     }
+    identity
 }
 
 const DIR_NAME: &str = ".agentrail";
