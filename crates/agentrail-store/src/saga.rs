@@ -2,6 +2,41 @@ use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaConfig, SagaStatus};
 use std::path::{Path, PathBuf};
 
+/// Adjust the saga cursor after a tail-shift starting at `from`.
+///
+/// If the cursor points at a step that got renumbered, it follows that step
+/// to its new number. Used by `agentrail insert`.
+pub fn cursor_after_shift(current: u32, from: u32, delta: i32) -> u32 {
+    if current == 0 || current < from {
+        return current;
+    }
+    let shifted = current as i64 + delta as i64;
+    shifted.max(0) as u32
+}
+
+/// Adjust the saga cursor after a move_step operation. The cursor follows
+/// the step by identity: if it was pointing at `from`, it now points at
+/// `to`. Otherwise, it shifts with the intervening range.
+pub fn cursor_after_move(current: u32, from: u32, to: u32) -> u32 {
+    if current == 0 || from == to {
+        return current;
+    }
+    if current == from {
+        return to;
+    }
+    if from < to {
+        if current > from && current <= to {
+            current - 1
+        } else {
+            current
+        }
+    } else if current >= to && current < from {
+        current + 1
+    } else {
+        current
+    }
+}
+
 const DIR_NAME: &str = ".agentrail";
 
 pub fn saga_dir(path: &Path) -> PathBuf {

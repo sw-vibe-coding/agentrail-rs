@@ -1,4 +1,6 @@
-use agentrail_cli::commands::{abort, begin, complete, distill, history, init, next, plan, status};
+use agentrail_cli::commands::{
+    abort, begin, complete, distill, history, init, insert, next, plan, reopen, reorder, status,
+};
 use agentrail_core::{FailureMode, OutputContract, Procedure, SagaStatus, Skill, Trajectory};
 use agentrail_store::{saga, skill, step, trajectory};
 use tempfile::tempdir;
@@ -569,4 +571,242 @@ fn complete_advances_to_existing_planned_step() {
     let step2_dir = step::find_step_dir(&saga_dir, 2).unwrap();
     let step2 = step::load_step(&step2_dir).unwrap();
     assert_eq!(step2.slug, "step2");
+}
+
+#[test]
+fn insert_slots_bugfix_between_pending_steps() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    // Seed three pending steps via complete+planned.
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("feat-a"),
+        next_prompt: Some("first"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec!["feat-b: second".to_string(), "feat-c: third".to_string()],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Insert a bugfix after step 1 (before feat-b).
+    insert::run(
+        tmp.path(),
+        1,
+        "hotfix-crash",
+        "Reproduce and fix the crash from issue #42",
+        "production",
+        None,
+    )
+    .unwrap();
+
+    let saga_dir = saga::saga_dir(tmp.path());
+    let steps = step::list_steps(&saga_dir).unwrap();
+    let numbered: Vec<(u32, String)> = steps
+        .iter()
+        .map(|(_, s)| (s.number, s.slug.clone()))
+        .collect();
+    assert_eq!(
+        numbered,
+        vec![
+            (1, "feat-a".into()),
+            (2, "hotfix-crash".into()),
+            (3, "feat-b".into()),
+            (4, "feat-c".into()),
+        ]
+    );
+
+    // Cursor was at 1 (pending feat-a) -- no shift, still 1.
+    let cfg = saga::load_saga(tmp.path()).unwrap();
+    assert_eq!(cfg.current_step, 1);
+}
+
+#[test]
+fn insert_adjusts_cursor_when_it_falls_in_shift_range() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("feat-a"),
+        next_prompt: Some("first"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec!["feat-b: second".to_string()],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Complete step 1 so the cursor advances to 2.
+    begin::run(tmp.path()).unwrap();
+    let args2 = complete::CompleteArgs {
+        summary: Some("done a"),
+        next_slug: None,
+        next_prompt: None,
+        next_context: vec![],
+        next_role: "legacy",
+        next_task_type: None,
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args2).unwrap();
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().current_step, 2);
+
+    // Insert after 1 -- feat-b shifts from 2 to 3, cursor should follow.
+    insert::run(tmp.path(), 1, "hotfix", "fix bug", "production", None).unwrap();
+
+    let cfg = saga::load_saga(tmp.path()).unwrap();
+    // Cursor follows feat-b (which was at 2, now at 3).
+    assert_eq!(cfg.current_step, 3);
+}
+
+#[test]
+fn reorder_moves_pending_step_forward() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("a"),
+        next_prompt: Some("first"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec![
+            "b: second".to_string(),
+            "c: third".to_string(),
+            "d: fourth".to_string(),
+        ],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Move step 2 (b) to position 4 -- c,d shift down, b ends at 4.
+    reorder::run(tmp.path(), 2, 4).unwrap();
+
+    let saga_dir = saga::saga_dir(tmp.path());
+    let steps = step::list_steps(&saga_dir).unwrap();
+    let numbered: Vec<(u32, String)> = steps
+        .iter()
+        .map(|(_, s)| (s.number, s.slug.clone()))
+        .collect();
+    assert_eq!(
+        numbered,
+        vec![
+            (1, "a".into()),
+            (2, "c".into()),
+            (3, "d".into()),
+            (4, "b".into()),
+        ]
+    );
+}
+
+#[test]
+fn reopen_completed_step_restores_cursor_and_preserves_commits() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("step1"),
+        next_prompt: Some("do it"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+    begin::run(tmp.path()).unwrap();
+
+    // Hand-record a commit on step 1 as if `complete` had captured HEAD.
+    let saga_dir = saga::saga_dir(tmp.path());
+    let step_dir = step::find_step_dir(&saga_dir, 1).unwrap();
+    let mut step_cfg = step::load_step(&step_dir).unwrap();
+    step_cfg
+        .commits
+        .push("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef".into());
+    step::save_step(&step_dir, &step_cfg).unwrap();
+
+    // Complete step 1 with --done so the saga is Completed.
+    let args2 = complete::CompleteArgs {
+        summary: Some("shipped"),
+        next_slug: None,
+        next_prompt: None,
+        next_context: vec![],
+        next_role: "legacy",
+        next_task_type: None,
+        planned: vec![],
+        done: true,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args2).unwrap();
+    assert_eq!(
+        saga::load_saga(tmp.path()).unwrap().status,
+        SagaStatus::Completed
+    );
+
+    // Bug reported -- reopen step 1.
+    reopen::run(tmp.path(), 1).unwrap();
+
+    let saga_cfg = saga::load_saga(tmp.path()).unwrap();
+    assert_eq!(saga_cfg.status, SagaStatus::Active);
+    assert_eq!(saga_cfg.current_step, 1);
+
+    let step_cfg = step::load_step(&step_dir).unwrap();
+    assert_eq!(step_cfg.status, agentrail_core::StepStatus::InProgress);
+    assert!(step_cfg.completed_at.is_none());
+    // Commits from the original completion are still there.
+    assert_eq!(
+        step_cfg.commits,
+        vec!["deadbeefdeadbeefdeadbeefdeadbeefdeadbeef".to_string()]
+    );
+}
+
+#[test]
+fn reopen_refuses_pending_step() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    let args = complete::CompleteArgs {
+        summary: Some("setup"),
+        next_slug: Some("step1"),
+        next_prompt: Some("do it"),
+        next_context: vec![],
+        next_role: "production",
+        next_task_type: None,
+        planned: vec![],
+        done: false,
+        reward: None,
+        actions: None,
+        failure_mode: None,
+    };
+    complete::run(tmp.path(), &args).unwrap();
+
+    // Step 1 is Pending -- reopen makes no sense here.
+    let err = reopen::run(tmp.path(), 1).unwrap_err();
+    assert!(
+        err.to_string().contains("only completed or blocked"),
+        "{err}"
+    );
 }

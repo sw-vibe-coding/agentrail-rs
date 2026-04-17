@@ -167,6 +167,61 @@ enum Commands {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Insert a new pending step at a chosen position, shifting later steps up
+    ///
+    /// Use when a bug or unplanned task needs to slot in before existing
+    /// pending work. The new step lands at position `after + 1`; every
+    /// pending/in-progress step with a number greater than `after` shifts
+    /// up by one (step.toml `number` and the on-disk `NNN-slug` directory
+    /// name are both updated). The operation is refused if any step that
+    /// would shift is already `Completed`, since completed steps anchor
+    /// git-tracked history.
+    ///
+    /// Pass `--after 0` to prepend at position 1 (only works if step 1 is
+    /// pending). The saga cursor follows its step by identity, so if you
+    /// are mid-way through the saga the `current_step` adjusts with the
+    /// shift.
+    Insert {
+        /// Position to insert after (0 prepends). The new step becomes N+1.
+        #[arg(long)]
+        after: u32,
+        /// Slug for the new step
+        #[arg(long)]
+        slug: String,
+        /// Step prompt: text, file path, or "-" for stdin
+        #[arg(long)]
+        prompt: String,
+        /// Step role (production, deterministic, validation, meta)
+        #[arg(long, default_value = "production")]
+        role: String,
+        /// Task type for skill/trajectory lookup
+        #[arg(long)]
+        task_type: Option<String>,
+    },
+    /// Move an existing pending/in-progress step to a different position
+    ///
+    /// Renumbers the source step and shifts the intervening steps by one
+    /// in the opposite direction. Refuses if the source or any intervening
+    /// step is `Completed`. The saga cursor follows its step by identity:
+    /// if it pointed at the moved step it now points at `--to`; if it
+    /// pointed at an intervening step it adjusts by one.
+    Reorder {
+        /// Source step number
+        from: u32,
+        /// Target position (must not exceed the highest step number)
+        #[arg(long)]
+        to: u32,
+    },
+    /// Reopen a completed or blocked step
+    ///
+    /// Transitions the step back to InProgress, clears `completed_at`, and
+    /// moves the saga cursor to it. The `commits` array is preserved, so
+    /// any git-history linkage from the original completion stays intact —
+    /// new work after reopen should be committed on top.
+    Reopen {
+        /// Step number to reopen
+        number: u32,
+    },
     /// Archive current saga to .agentrail-archive/ and clear .agentrail/
     Archive {
         /// Optional reason for archiving (stored in archive-reason.txt)
@@ -326,6 +381,23 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         Commands::Plan { update } => commands::plan::run(saga_path, update.as_deref()).map(|_| 0),
         Commands::History => commands::history::run(saga_path).map(|_| 0),
         Commands::Abort { reason } => commands::abort::run(saga_path, reason.as_deref()).map(|_| 0),
+        Commands::Insert {
+            after,
+            slug,
+            prompt,
+            role,
+            task_type,
+        } => commands::insert::run(
+            saga_path,
+            after,
+            &slug,
+            &prompt,
+            &role,
+            task_type.as_deref(),
+        )
+        .map(|_| 0),
+        Commands::Reorder { from, to } => commands::reorder::run(saga_path, from, to).map(|_| 0),
+        Commands::Reopen { number } => commands::reopen::run(saga_path, number).map(|_| 0),
         Commands::Archive { reason } => {
             commands::archive::run(saga_path, reason.as_deref()).map(|_| 0)
         }

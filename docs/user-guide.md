@@ -305,6 +305,9 @@ interface.
 | `agentrail distill <task_type>` | Generate skill doc from trajectories |
 | `agentrail run-loop` | Auto-execute deterministic steps |
 | `agentrail abort [--reason <text>]` | Mark current step as blocked |
+| `agentrail insert --after <N> --slug <s> --prompt <p>` | Insert a new step at position N+1 |
+| `agentrail reorder <N> --to <M>` | Move a pending/in-progress step to position M |
+| `agentrail reopen <N>` | Reopen a completed or blocked step |
 | `agentrail --version` | Show version and build info |
 
 ### Complete flags
@@ -322,6 +325,59 @@ interface.
 | `--actions <text>` | Actions taken (default: summary) |
 | `--failure-mode <id>` | Failure mode identifier |
 | `--done` | Mark saga as complete |
+
+## Handling Surprises Mid-Saga
+
+Sometimes an unplanned task appears — another agent reports a bug, a
+regression turns up during testing, or the current step uncovers work
+that has to happen first. Three commands let you adjust the saga
+without abandoning it:
+
+### `agentrail insert --after <N>`
+
+Slot a new pending step in at position N+1. Every pending/in-progress
+step with a higher number shifts up by one (both `step.toml` `number`
+and the `NNN-slug` directory name are updated). The saga cursor follows
+its step by identity, so if you are currently mid-saga you end up
+pointing at the same step after the shift.
+
+```bash
+# Found a blocker before step 3. Insert a fix before it.
+agentrail insert --after 2 --slug hotfix-crash \
+  --prompt "Reproduce and fix the crash from issue #42"
+```
+
+**Completed steps never shift.** The operation refuses if any step in
+the affected range is already `Completed`, because those steps anchor
+git-tracked history.
+
+### `agentrail reorder <N> --to <M>`
+
+Renumber an existing pending/in-progress step to a new position.
+Intervening steps shift by one in the opposite direction. Completed
+steps in the swept range cause the move to be rejected.
+
+```bash
+# Decided step 5 should actually go earlier.
+agentrail reorder 5 --to 3
+```
+
+### `agentrail reopen <N>`
+
+Transition a completed or blocked step back to `in-progress`, clear
+`completed_at`, and move the cursor to it. The step's `commits` array
+is preserved so the git-history linkage from the original completion
+stays intact — new work after reopen should be committed on top of
+those commits.
+
+```bash
+# A bug was reported against the work from step 3.
+agentrail reopen 3
+# ... fix it, git commit ...
+agentrail complete --summary "Followup fix for reported regression"
+```
+
+If the saga was already `Completed`, reopen flips it back to `Active`.
 
 ## Tips
 

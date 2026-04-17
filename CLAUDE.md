@@ -48,7 +48,14 @@ Dependency flow: `cli -> store, exec, validate -> core`
 - **Dual memory (XSkill pattern)**: skills (strategic workflow docs per task category) + experiences (tactical per-run records). See `docs/dual-memory.md`.
 - **Step roles** (Meta, Production, Deterministic, Validation): orchestration loop. Meta prepares handoffs, production does semantic work, deterministic runs without agents, validation checks outputs.
 - **ICRL injection**: `agentrail next` retrieves successful experiences for the step's task_type and injects them into the prompt output.
-- **Step transitions** enforce: Pending -> InProgress -> Completed|Blocked.
+- **Step transitions** enforce: Pending -> InProgress -> Completed|Blocked,
+  plus Completed|Blocked -> InProgress (reopen/unblock). Reopening clears
+  `completed_at` but preserves the step's recorded `commits` so the
+  git-history linkage survives.
+- **Mid-saga editing**: `agentrail insert --after N`, `agentrail reorder N --to M`,
+  and `agentrail reopen N` let an agent adjust the saga when a surprise
+  lands. All three refuse to touch completed steps: completed steps
+  never renumber, so git-tracked history stays stable.
 - **Domain repos**: per-domain knowledge (skills, experiences, executors, validators) in separate repos. See `docs/domain-repos.md`.
 
 ## Storage Layout
