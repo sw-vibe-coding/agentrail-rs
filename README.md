@@ -1,5 +1,9 @@
 # AgentRail
 
+<p align="center">
+  <img src="images/agentrail-logo.png" alt="AgentRail logo" width="320">
+</p>
+
 A Rust workflow CLI for keeping AI agents on track across fresh contexts.
 
 AgentRail solves a specific engineering pain point: **AI coding agents lose operational knowledge between contexts.** The agent knows the goal but forgets procedural details -- which API to call, which flags to pass, which files to reference, and how to validate the output. AgentRail provides structured handoffs, deterministic step execution, and in-context reinforcement learning (ICRL) so agents succeed on the first attempt instead of improvising and failing 25% of the time.
@@ -187,9 +191,16 @@ TDD workflow: write failing test first, implement minimum logic, refactor.
 
 ## Links
 
-- [Blog post: From avoid-compaction to AgentRail](https://software-wrighter-lab.github.io/2026/03/15/saw-reg-rs-avoid-compaction-agentrail/)
-- [Discord](https://discord.com/invite/Ctzk5uHggZ)
+- Blog: [Software Wrighter Lab](https://software-wrighter-lab.github.io/)
+- Discord: [Join the community](https://discord.com/invite/Ctzk5uHggZ)
+- YouTube: [Software Wrighter](https://www.youtube.com/@SoftwareWrighter)
+
+Related post: [From avoid-compaction to AgentRail](https://software-wrighter-lab.github.io/2026/03/15/saw-reg-rs-avoid-compaction-agentrail/)
+
+## Copyright
+
+Copyright (c) 2026 Michael A. Wright
 
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for the full text.
