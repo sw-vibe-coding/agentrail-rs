@@ -1,10 +1,42 @@
 use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaStatus, StepStatus};
-use agentrail_store::{domain, saga, skill, step, trajectory};
+use agentrail_store::{domain, instructions, saga, skill, step, trajectory};
 use std::path::Path;
 
-/// Returns exit code: 0 = active step found, 1 = saga complete, 2 = no saga
-pub fn run(saga_path: &Path) -> Result<u8> {
+pub struct NextArgs {
+    /// Refuse to proceed (exit code 3) when the briefing block is stale.
+    /// By default, `next` only prints a warning and continues.
+    pub strict: bool,
+}
+
+/// Returns exit code:
+/// - 0 = active step found
+/// - 1 = saga complete
+/// - 2 = no saga
+/// - 3 = briefing stale and `--strict` was set
+pub fn run(saga_path: &Path, args: &NextArgs) -> Result<u8> {
+    // Briefing freshness check runs first so the agent sees the warning
+    // before reading any step instructions. auto_apply (if configured)
+    // refreshes the block in-place and emits a "re-read CLAUDE.md" notice.
+    let briefing_stale = match instructions::freshness_check_with_auto_apply(saga_path) {
+        Ok(Some(msg)) => {
+            eprintln!("{msg}");
+            eprintln!();
+            true
+        }
+        Ok(None) => false,
+        Err(e) => {
+            // Don't fail `next` because of a briefing problem — warn instead.
+            eprintln!("⚠ Briefing freshness check failed: {e}");
+            eprintln!();
+            false
+        }
+    };
+    if briefing_stale && args.strict {
+        eprintln!("Refusing to proceed: --strict set and briefing is stale.");
+        return Ok(3);
+    }
+
     if !saga::saga_exists(saga_path) {
         eprintln!("No saga found. Run `agentrail init` to create one.");
         return Ok(2);

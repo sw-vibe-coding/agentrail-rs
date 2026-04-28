@@ -1,5 +1,5 @@
 use agentrail_core::error::Result;
-use agentrail_store::{saga, step};
+use agentrail_store::{instructions, saga, step};
 use std::path::Path;
 
 pub fn run(saga_path: &Path) -> Result<()> {
@@ -28,6 +28,12 @@ pub fn run(saga_path: &Path) -> Result<()> {
                 marker, s.number, s.slug, s.role, s.description
             );
         }
+    }
+
+    // Read-only freshness warning — never auto-applies from `status`.
+    if let Ok(Some(msg)) = instructions::freshness_warning(saga_path) {
+        println!();
+        println!("{msg}");
     }
 
     Ok(())

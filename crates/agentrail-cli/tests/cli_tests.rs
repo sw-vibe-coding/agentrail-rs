@@ -26,7 +26,7 @@ fn init_fails_when_saga_exists() {
 #[test]
 fn next_returns_2_when_no_saga() {
     let tmp = tempdir().unwrap();
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 2);
 }
 
@@ -34,7 +34,7 @@ fn next_returns_2_when_no_saga() {
 fn next_returns_0_after_init() {
     let tmp = tempdir().unwrap();
     init::run(tmp.path(), "s", "plan", false).unwrap();
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 0);
 }
 
@@ -47,7 +47,7 @@ fn next_returns_1_when_complete() {
     config.status = SagaStatus::Completed;
     saga::save_saga(tmp.path(), &config).unwrap();
 
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 1);
 }
 
@@ -85,7 +85,7 @@ fn full_workflow() {
     assert_eq!(config.current_step, 1);
 
     // Next should show step 1
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 0);
 
     // Begin step 1
@@ -116,7 +116,7 @@ fn full_workflow() {
     assert_eq!(config.status, SagaStatus::Completed);
 
     // Next should return 1 (complete)
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 1);
 }
 
@@ -256,7 +256,7 @@ fn complete_with_task_type_and_next_shows_trajectories() {
     assert_eq!(step_config.task_type, Some("tts".to_string()));
 
     // Next should succeed and include trajectory data (we just verify it runs)
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 0);
 }
 
@@ -317,7 +317,7 @@ fn next_shows_skill_and_trajectories_together() {
     complete::run(tmp.path(), &args).unwrap();
 
     // Next should show both skill and trajectory
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 0);
 }
 
@@ -507,7 +507,7 @@ fn full_loop_complete_with_trajectory_then_distill_then_next() {
     distill::run(tmp.path(), "tts").unwrap();
 
     // Next for step 2 should show both the distilled skill and the trajectory
-    let code = next::run(tmp.path()).unwrap();
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
     assert_eq!(code, 0);
 
     // Verify skill exists
@@ -936,4 +936,61 @@ fn instructions_apply_errors_when_no_targets_and_no_profile() {
     // No CLAUDE.md, no AGENTS.md, no profile config.
     let err = instructions::run(tmp.path(), instructions::Action::Apply).unwrap_err();
     assert!(err.to_string().contains("No briefing targets"));
+}
+
+#[test]
+fn next_strict_returns_3_when_briefing_is_stale() {
+    let tmp = tempdir().unwrap();
+    // Set up an opted-in briefing, then drift it.
+    std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+    instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    // Tamper with the briefing block to force "stale".
+    let path = tmp.path().join("CLAUDE.md");
+    let body = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, body.replace("Git hygiene", "Git hygiene (DRIFT)")).unwrap();
+
+    // Default `next` warns but exits 0 (saga has no current step yet, so 0).
+    let warn_code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
+    assert_eq!(warn_code, 0);
+
+    // `--strict` refuses to proceed.
+    let strict_code = next::run(tmp.path(), &next::NextArgs { strict: true }).unwrap();
+    assert_eq!(strict_code, 3);
+}
+
+#[test]
+fn next_silent_when_briefing_not_opted_in() {
+    let tmp = tempdir().unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+    // No instruction-profile.toml, no instruction-lock.toml — the briefing
+    // is not wired up. `next` must NOT nag.
+    let code = next::run(tmp.path(), &next::NextArgs { strict: true }).unwrap();
+    assert_eq!(code, 0);
+}
+
+#[test]
+fn next_auto_apply_refreshes_block_in_place() {
+    let tmp = tempdir().unwrap();
+    let saga = tmp.path().join(".agentrail");
+    std::fs::create_dir_all(&saga).unwrap();
+    std::fs::write(
+        saga.join("instruction-profile.toml"),
+        "profile = \"default\"\nauto_apply = true\n",
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+    init::run(tmp.path(), "s", "p", false).unwrap();
+
+    // Block has not been applied yet; auto_apply should rewrite it.
+    let code = next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap();
+    assert_eq!(code, 0);
+
+    let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
+    assert!(body.contains("agentrail:global:start"));
+
+    // A second `next` is silent (block now matches embedded).
+    let code2 = next::run(tmp.path(), &next::NextArgs { strict: true }).unwrap();
+    assert_eq!(code2, 0);
 }

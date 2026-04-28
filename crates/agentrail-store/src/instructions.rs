@@ -82,13 +82,20 @@ struct EmbeddedProfile {
 /// Per-repo briefing config in `.agentrail/instruction-profile.toml`.
 ///
 /// All fields are optional. Defaults: profile = "default", targets =
-/// auto-detected from `CLAUDE.md` and `AGENTS.md` in the project root.
+/// auto-detected from `CLAUDE.md` and `AGENTS.md` in the project root,
+/// auto_apply = false.
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct UserProfile {
     #[serde(default)]
     pub profile: Option<String>,
     #[serde(default)]
     pub targets: Vec<String>,
+    /// When true, `agentrail next` (and other read paths) will rewrite the
+    /// briefing block automatically when stale, instead of merely warning.
+    /// Files are written but not committed — the agent must commit the
+    /// refresh before `agentrail complete`.
+    #[serde(default)]
+    pub auto_apply: bool,
 }
 
 /// Lock file written to `.agentrail/instruction-lock.toml` after each apply.
@@ -475,6 +482,107 @@ pub fn status(saga_path: &Path) -> Result<StatusReport> {
 }
 
 // ---------------------------------------------------------------------------
+// Freshness check (used by `agentrail next` / `agentrail status`)
+// ---------------------------------------------------------------------------
+
+/// Has this repo opted into the briefing system? Returns true when the user
+/// has committed to it via either an `instruction-profile.toml` or a
+/// previously-written `instruction-lock.toml`. Without one of those, the
+/// freshness check stays silent so we don't nag repos that haven't adopted
+/// the briefing.
+pub fn opted_in(saga_path: &Path) -> bool {
+    let dir = saga_dir(saga_path);
+    dir.join(PROFILE_FILENAME).is_file() || dir.join(LOCK_FILENAME).is_file()
+}
+
+/// One-line summary of why a repo's briefing is stale, for printing as a
+/// banner in `agentrail next`. Returns `None` if the repo is up to date or
+/// has not opted into the briefing.
+pub fn freshness_warning(saga_path: &Path) -> Result<Option<String>> {
+    if !opted_in(saga_path) {
+        return Ok(None);
+    }
+    let report = status(saga_path)?;
+    let stale_targets: Vec<_> = report
+        .targets
+        .iter()
+        .filter(|t| t.status != TargetStatus::UpToDate)
+        .collect();
+
+    let lock_mismatch = report
+        .lock
+        .as_ref()
+        .is_some_and(|l| l.content_hash != report.embedded_hash);
+
+    if stale_targets.is_empty() && !lock_mismatch {
+        return Ok(None);
+    }
+
+    let mut msg = String::new();
+    msg.push_str("⚠ Briefing stale: embedded=");
+    msg.push_str(&report.embedded_hash);
+    if let Some(lock) = &report.lock {
+        msg.push_str(", lock=");
+        msg.push_str(&lock.content_hash);
+    } else {
+        msg.push_str(", lock=(none)");
+    }
+    msg.push('\n');
+    for t in &stale_targets {
+        let label = match t.status {
+            TargetStatus::Stale => "stale",
+            TargetStatus::NoBlock => "no briefing block",
+            TargetStatus::Missing => "missing target",
+            TargetStatus::UpToDate => continue,
+        };
+        msg.push_str(&format!("    {}: {}\n", t.target.display(), label));
+    }
+    msg.push_str(
+        "  Run `agentrail instructions apply`, commit, then re-read CLAUDE.md \
+         before proceeding.",
+    );
+    Ok(Some(msg))
+}
+
+/// If the briefing is stale and `auto_apply = true` is set in the user
+/// profile, refresh the block in-place and return a "we just rewrote your
+/// CLAUDE.md, re-read it" notice. Otherwise return the regular warning.
+///
+/// Used by `agentrail next`. The auto-apply path writes files but does NOT
+/// commit them — the agent (or the user) must include the refreshed files
+/// in the next commit before `agentrail complete`.
+pub fn freshness_check_with_auto_apply(saga_path: &Path) -> Result<Option<String>> {
+    let warn = freshness_warning(saga_path)?;
+    let Some(warn) = warn else {
+        return Ok(None);
+    };
+    let user = load_user_profile(saga_path).unwrap_or_default();
+    if !user.auto_apply {
+        return Ok(Some(warn));
+    }
+
+    // Auto-apply path: refresh the block, then return a refreshed-notice.
+    let (profile, outcomes) = apply(saga_path)?;
+    let refreshed: Vec<String> = outcomes
+        .iter()
+        .filter(|o| o.changed)
+        .map(|o| o.target.display().to_string())
+        .collect();
+    let mut notice = format!(
+        "✱ Briefing was auto-refreshed (profile '{profile}'). Re-read CLAUDE.md \
+         before proceeding.\n"
+    );
+    for r in &refreshed {
+        notice.push_str(&format!("    refreshed: {r}\n"));
+    }
+    notice.push_str(
+        "  The refresh modified tracked files. Stage them with the rest of \
+         your commit before `agentrail complete`.",
+    );
+    Ok(Some(notice))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -659,5 +767,104 @@ mod tests {
 
         let lock = load_lock(tmp.path()).unwrap().unwrap();
         assert_eq!(lock.targets, vec!["docs/RULES.md".to_string()]);
+    }
+
+    #[test]
+    fn freshness_silent_when_not_opted_in() {
+        let tmp = tempdir().unwrap();
+        // Bare repo: no profile, no lock, no targets — never adopted briefing.
+        assert!(!opted_in(tmp.path()));
+        assert!(freshness_warning(tmp.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn freshness_silent_when_up_to_date() {
+        let tmp = tempdir().unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+        apply(tmp.path()).unwrap();
+        assert!(opted_in(tmp.path()));
+        assert!(freshness_warning(tmp.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn freshness_warns_when_block_drifts() {
+        let tmp = tempdir().unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+        apply(tmp.path()).unwrap();
+
+        // Tamper inside the block.
+        let path = tmp.path().join("CLAUDE.md");
+        let body = std::fs::read_to_string(&path).unwrap();
+        let drifted = body.replace("Git hygiene", "Git hygiene (TAMPERED)");
+        std::fs::write(&path, drifted).unwrap();
+
+        let warn = freshness_warning(tmp.path()).unwrap().unwrap();
+        assert!(warn.contains("Briefing stale"));
+        assert!(warn.contains("CLAUDE.md"));
+        assert!(warn.contains("agentrail instructions apply"));
+    }
+
+    #[test]
+    fn freshness_warns_when_lock_pre_dates_embedded() {
+        let tmp = tempdir().unwrap();
+        let saga = tmp.path().join(".agentrail");
+        std::fs::create_dir_all(&saga).unwrap();
+        // Lock says it was applied with hash X, but X is not the embedded hash.
+        let stale_lock = "profile = \"default\"\ncontent_hash = \"deadbeefdeadbeef\"\nupdated_at = \"2026-01-01T00:00:00\"\ntargets = [\"CLAUDE.md\"]\n";
+        std::fs::write(saga.join("instruction-lock.toml"), stale_lock).unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+
+        let warn = freshness_warning(tmp.path()).unwrap().unwrap();
+        assert!(warn.contains("Briefing stale"));
+        assert!(warn.contains("lock=deadbeefdeadbeef"));
+    }
+
+    #[test]
+    fn auto_apply_refreshes_and_returns_notice() {
+        let tmp = tempdir().unwrap();
+        let saga = tmp.path().join(".agentrail");
+        std::fs::create_dir_all(&saga).unwrap();
+        std::fs::write(
+            saga.join("instruction-profile.toml"),
+            "profile = \"default\"\nauto_apply = true\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+
+        let msg = freshness_check_with_auto_apply(tmp.path())
+            .unwrap()
+            .unwrap();
+        assert!(msg.contains("auto-refreshed"));
+        assert!(msg.contains("Re-read CLAUDE.md"));
+
+        // Block was actually written.
+        let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
+        assert!(body.contains("agentrail:global:start"));
+
+        // Now up to date — no further warning.
+        assert!(freshness_warning(tmp.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn auto_apply_off_just_warns() {
+        let tmp = tempdir().unwrap();
+        let saga = tmp.path().join(".agentrail");
+        std::fs::create_dir_all(&saga).unwrap();
+        std::fs::write(
+            saga.join("instruction-profile.toml"),
+            "profile = \"default\"\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+
+        let msg = freshness_check_with_auto_apply(tmp.path())
+            .unwrap()
+            .unwrap();
+        assert!(msg.contains("Briefing stale"));
+        assert!(!msg.contains("auto-refreshed"));
+
+        // CLAUDE.md was NOT modified.
+        let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
+        assert!(!body.contains("agentrail:global:start"));
     }
 }

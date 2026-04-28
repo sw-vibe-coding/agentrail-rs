@@ -107,7 +107,18 @@ enum Commands {
     /// Show current saga state
     Status,
     /// Output current step prompt and context for a fresh agent session
-    Next,
+    ///
+    /// Also runs a briefing freshness check: if `.agentrail/instruction-lock.toml`
+    /// or `.agentrail/instruction-profile.toml` exists, the embedded briefing
+    /// hash is compared against the stamped block in CLAUDE.md / AGENTS.md.
+    /// On drift, prints a stale-briefing banner and (if `auto_apply = true`
+    /// in the user profile) rewrites the block in-place. Use `--strict` to
+    /// refuse to proceed (exit 3) when stale.
+    Next {
+        /// Refuse to proceed when the briefing is stale (exit 3 instead of warn)
+        #[arg(long)]
+        strict: bool,
+    },
     /// Mark the current step as in-progress
     Begin,
     /// Complete current step, optionally define next step
@@ -390,7 +401,10 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         )
         .map(|_| 0),
         Commands::Status => commands::status::run(saga_path).map(|_| 0),
-        Commands::Next => commands::next::run(saga_path),
+        Commands::Next { strict } => {
+            let args = commands::next::NextArgs { strict };
+            commands::next::run(saga_path, &args)
+        }
         Commands::Begin => commands::begin::run(saga_path).map(|_| 0),
         Commands::Complete {
             summary,
