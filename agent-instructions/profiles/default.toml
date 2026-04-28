@@ -1,8 +1,11 @@
 name = "default"
-description = "Default agentrail briefing — baseline expectations, git hygiene, and metadata discipline."
+description = "Default agentrail briefing — session protocol, metadata discipline, push and recovery rules, git hygiene."
 
 include = [
     "global/baseline.md",
-    "global/git-hygiene.md",
+    "global/session-protocol.md",
     "global/agentrail-process.md",
+    "global/push-discipline.md",
+    "global/recovery.md",
+    "global/git-hygiene.md",
 ]

@@ -26,12 +26,24 @@ pub const EMBEDDED_FRAGMENTS: &[(&str, &str)] = &[
         include_str!("../../../agent-instructions/global/baseline.md"),
     ),
     (
-        "global/git-hygiene.md",
-        include_str!("../../../agent-instructions/global/git-hygiene.md"),
+        "global/session-protocol.md",
+        include_str!("../../../agent-instructions/global/session-protocol.md"),
     ),
     (
         "global/agentrail-process.md",
         include_str!("../../../agent-instructions/global/agentrail-process.md"),
+    ),
+    (
+        "global/push-discipline.md",
+        include_str!("../../../agent-instructions/global/push-discipline.md"),
+    ),
+    (
+        "global/recovery.md",
+        include_str!("../../../agent-instructions/global/recovery.md"),
+    ),
+    (
+        "global/git-hygiene.md",
+        include_str!("../../../agent-instructions/global/git-hygiene.md"),
     ),
 ];
 
