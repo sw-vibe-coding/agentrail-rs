@@ -1,5 +1,6 @@
 use agentrail_cli::commands::{
-    abort, begin, complete, distill, history, init, insert, next, plan, reopen, reorder, status,
+    abort, begin, complete, distill, history, init, insert, instructions, next, plan, reopen,
+    reorder, status,
 };
 use agentrail_core::{FailureMode, OutputContract, Procedure, SagaStatus, Skill, Trajectory};
 use agentrail_store::{saga, skill, step, trajectory};
@@ -854,4 +855,85 @@ fn reopen_refuses_pending_step() {
         err.to_string().contains("only completed or blocked"),
         "{err}"
     );
+}
+
+#[test]
+fn instructions_status_returns_1_when_no_block_then_0_after_apply() {
+    let tmp = tempdir().unwrap();
+    std::fs::write(tmp.path().join("CLAUDE.md"), "# Project\n\nlocal notes\n").unwrap();
+    std::fs::create_dir_all(tmp.path().join(".agentrail")).unwrap();
+
+    // No block yet -> stale-ish (NoBlock counts as needs-apply).
+    let pre = instructions::run(tmp.path(), instructions::Action::Status).unwrap();
+    assert_eq!(pre, 1);
+
+    let apply_code = instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+    assert_eq!(apply_code, 0);
+
+    // After apply, status reports up to date.
+    let post = instructions::run(tmp.path(), instructions::Action::Status).unwrap();
+    assert_eq!(post, 0);
+
+    // Block landed in the file and lock was written.
+    let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
+    assert!(body.contains("agentrail:global:start"));
+    assert!(body.contains("Agentrail metadata discipline"));
+    assert!(body.contains("local notes"));
+
+    let lock = tmp.path().join(".agentrail/instruction-lock.toml");
+    assert!(lock.is_file());
+}
+
+#[test]
+fn instructions_apply_preserves_local_sections_outside_markers() {
+    let tmp = tempdir().unwrap();
+    let path = tmp.path().join("AGENTS.md");
+    std::fs::write(
+        &path,
+        "# AGENTS\n\n## Local rules\n\nproject-specific stuff\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(tmp.path().join(".agentrail")).unwrap();
+
+    instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+    let after = std::fs::read_to_string(&path).unwrap();
+    assert!(after.contains("## Local rules"));
+    assert!(after.contains("project-specific stuff"));
+    assert!(after.contains("agentrail:global:start"));
+
+    // Re-applying with no upstream change is a no-op.
+    let before_second = std::fs::read(&path).unwrap();
+    instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+    let after_second = std::fs::read(&path).unwrap();
+    assert_eq!(before_second, after_second);
+}
+
+#[test]
+fn instructions_diff_exits_1_when_block_drifts() {
+    let tmp = tempdir().unwrap();
+    std::fs::write(tmp.path().join("CLAUDE.md"), "# Project\n").unwrap();
+    std::fs::create_dir_all(tmp.path().join(".agentrail")).unwrap();
+    instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+
+    // Tamper inside the block.
+    let path = tmp.path().join("CLAUDE.md");
+    let body = std::fs::read_to_string(&path).unwrap();
+    let drifted = body.replace("Git hygiene", "Git hygiene (LOCAL EDIT)");
+    std::fs::write(&path, drifted).unwrap();
+
+    let diff_code = instructions::run(tmp.path(), instructions::Action::Diff).unwrap();
+    assert_eq!(diff_code, 1, "diff must signal drift via non-zero exit");
+
+    // After re-apply, diff is clean.
+    instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+    let clean = instructions::run(tmp.path(), instructions::Action::Diff).unwrap();
+    assert_eq!(clean, 0);
+}
+
+#[test]
+fn instructions_apply_errors_when_no_targets_and_no_profile() {
+    let tmp = tempdir().unwrap();
+    // No CLAUDE.md, no AGENTS.md, no profile config.
+    let err = instructions::run(tmp.path(), instructions::Action::Apply).unwrap_err();
+    assert!(err.to_string().contains("No briefing targets"));
 }

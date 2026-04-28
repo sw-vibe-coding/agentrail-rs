@@ -316,6 +316,41 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// Manage shared agent briefing — the global instructions clearinghouse
+    ///
+    /// Renders embedded `agent-instructions/` fragments into a markered
+    /// block in CLAUDE.md / AGENTS.md (or the targets configured in
+    /// `.agentrail/instruction-profile.toml`), preserving everything outside
+    /// the markers. The lock file `.agentrail/instruction-lock.toml` records
+    /// the profile name, content hash, and timestamp of the last apply.
+    ///
+    /// The canonical source lives in `agent-instructions/` at the workspace
+    /// root and is bundled into the binary at compile time. To change the
+    /// shared rules: edit the fragments, commit, rebuild (e.g. `sw-install`),
+    /// and re-run `agentrail instructions apply` in each project.
+    Instructions {
+        #[command(subcommand)]
+        action: InstructionsAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum InstructionsAction {
+    /// Show whether each target's briefing block matches the embedded one
+    ///
+    /// Exits 0 if every target is up to date, 1 otherwise — suitable for
+    /// CI gating.
+    Status,
+    /// Render the embedded briefing into the target files (idempotent)
+    Apply,
+    /// Show line-level differences between embedded and current blocks
+    ///
+    /// Exits 0 if every target is up to date, 1 if any differ.
+    Diff,
+    /// Print the rendered default profile body to stdout
+    Show,
+    /// List embedded profiles and fragments bundled into this binary
+    List,
 }
 
 fn main() -> ExitCode {
@@ -430,6 +465,16 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         Commands::Snapshot { list } => {
             let args = commands::snapshot::SnapshotArgs { list };
             commands::snapshot::run(saga_path, &args).map(|_| 0)
+        }
+        Commands::Instructions { action } => {
+            let act = match action {
+                InstructionsAction::Status => commands::instructions::Action::Status,
+                InstructionsAction::Apply => commands::instructions::Action::Apply,
+                InstructionsAction::Diff => commands::instructions::Action::Diff,
+                InstructionsAction::Show => commands::instructions::Action::Show,
+                InstructionsAction::List => commands::instructions::Action::List,
+            };
+            commands::instructions::run(saga_path, act)
         }
     }
 }

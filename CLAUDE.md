@@ -36,8 +36,8 @@ curated experiences, executor implementations, validators. See
 Cargo workspace (`edition = "2024"`) with five crates under `crates/`:
 
 - **agentrail-core** -- Domain types and error enum. All other crates depend on this. Key types: `SagaConfig`, `StepConfig`, `StepRole`, `Trajectory`, `HandoffPacket`, `JobSpec`. Error type: `agentrail_core::error::Error` with `Result<T>` alias.
-- **agentrail-store** -- File-based persistence against `.agentrail/`. Modules: `saga` (init/load/save), `step` (create/transition/list with NNN-slug dirs), `trajectory` (ICRL record save/retrieve), `session` (Claude Code JSONL snapshot).
-- **agentrail-cli** -- Binary crate (`agentrail`). 8 commands: init, status, next, begin, complete, plan, history, abort. Has `lib.rs` exporting `commands` module for testability.
+- **agentrail-store** -- File-based persistence against `.agentrail/`. Modules: `saga` (init/load/save), `step` (create/transition/list with NNN-slug dirs), `trajectory` (ICRL record save/retrieve), `session` (Claude Code JSONL snapshot), `instructions` (briefing renderer + marker apply for shared agent rules).
+- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
 - **agentrail-exec** -- Deterministic step executors (stub; will become trait + shell executor routing to domain repos).
 - **agentrail-validate** -- Output validators (stub; will become trait + shell validator routing to domain repos).
 
@@ -74,6 +74,45 @@ All runtime data in `.agentrail/` (never `.avoid-compaction/`):
 .agentrail/trajectories/{task_type}/run_NNN.json (existing, backward compat)
 .agentrail/domains.toml                     (planned)
 .agentrail/sessions/{session-id}.jsonl
+.agentrail/instruction-profile.toml         (optional, briefing config)
+.agentrail/instruction-lock.toml            (briefing apply record)
+```
+
+## Briefing / clearinghouse (`agentrail instructions`)
+
+A central place for shared agent rules. The `agent-instructions/` directory at
+the workspace root holds the canonical fragments; they are bundled into the
+binary at compile time via `include_str!`. Each project's `CLAUDE.md` /
+`AGENTS.md` carries a markered block that the binary regenerates idempotently:
+
+```
+<!-- agentrail:global:start profile=default version=<hash> -->
+... rendered fragments ...
+<!-- agentrail:global:end -->
+```
+
+Anything outside the markers is preserved verbatim, so repo-local rules and
+the global briefing coexist in the same file.
+
+Commands:
+- `agentrail instructions status` — exit 0 if up to date, 1 if any target is
+  stale, missing, or has no briefing block.
+- `agentrail instructions apply` — render the embedded block into the resolved
+  targets and write `.agentrail/instruction-lock.toml`. Idempotent.
+- `agentrail instructions diff` — line-level diff between embedded and current.
+- `agentrail instructions show` — print the rendered default profile body.
+- `agentrail instructions list` — list embedded profiles and fragments.
+
+Update flow: edit `agent-instructions/<...>.md` → commit → rebuild
+(`sw-install`) → in each project, `agentrail instructions apply` →
+commit the regenerated block. The lock file's `content_hash` is a stable
+FNV-1a hash of the rendered body, so drift is detectable without a network
+round-trip.
+
+Per-repo override (optional, `.agentrail/instruction-profile.toml`):
+```toml
+profile = "default"
+targets = ["CLAUDE.md", "AGENTS.md"]   # default: any of these that exist
 ```
 
 ## Key Documentation

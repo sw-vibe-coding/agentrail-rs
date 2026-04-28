@@ -1,0 +1,360 @@
+
+
+
+
+I need a "clearing house" where agents can learn from each others mistakes or a corrective action I proscribe can be communicated to all agents, not just the current one.  e.g., I have many Claude agents using my "agentrail" saga/steps process.  They keep forgetting to track/commit/push changes to the agentrail metadata.  When I remind one, I want them all to learn this new rule.  Today, I have to tell each agent (which results in each CLAUDE.md being slightly different).  I would like a central place (maybe a git repo) that has versions of CLAUDE.md files (this also apploes to AGENTS.md) and a way to have general info shared but repo-specific info not shared.  Agentrail itself might be the mechanism to do this, as its usage often tails exiting and restarting an agent (or changing to a different agent).  So, today I type something like "claude go" or "codex go" or "opencode go" and the agent reads its file and issues agentrail commands to determine what to do.  Maybe a new command agentrail launch {claude,codex,opencode} would merge general (recently updated) global agent instructions with repo-specific ones.  Would need some markers in the md file to separate the replaceable part from the preserved part.  Also, these changes should also be tracked.  Ideas?
+
+Thought for a few seconds
+You need a shared agent-instruction clearing house with:
+
+Global rules that every agent should receive.
+
+Repo-local rules that stay specific to one project.
+
+Agent-specific adapters for Claude, Codex, OpenCode, etc.
+
+Versioning/auditability so corrective actions are tracked.
+
+A launch/update path so agents refresh instructions naturally when starting or resuming work.
+
+I think this fits very well as an agentrail feature.
+
+Core idea
+Create a central repo, maybe:
+
+sw-cli-tools/agent-instructions
+or:
+
+sw-vibe-coding/agent-clearinghouse
+sw-cli-tools/agent-briefing
+sw-cli-tools/agent-doctrine
+sw-cli-tools/agent-rules
+Then each working repo keeps only the local/project-specific parts of CLAUDE.md, AGENTS.md, etc., while agentrail can regenerate the shared parts.
+
+Suggested file model
+Central repo:
+
+agent-instructions/
+  global/
+    baseline.md
+    git-hygiene.md
+    agentrail-process.md
+    testing.md
+    commit-discipline.md
+    safety.md
+
+  agents/
+    claude.md
+    codex.md
+    opencode.md
+
+  incidents/
+    2026-04-28-agentrail-metadata-not-committed.md
+
+  profiles/
+    default.toml
+    rust-repo.toml
+    cor24-repo.toml
+    docs-repo.toml
+Per project repo:
+
+CLAUDE.md
+AGENTS.md
+.agentrail/
+  instruction-profile.toml
+  instruction-lock.toml
+Markdown marker strategy
+Use protected generated regions:
+
+# CLAUDE.md
+
+<!-- agentrail:global:start profile=rust-repo agent=claude version=2026-04-28 -->
+Generated shared instructions go here.
+Do not edit manually.
+<!-- agentrail:global:end -->
+
+<!-- agentrail:local:start -->
+Repo-specific instructions go here.
+This section is preserved.
+<!-- agentrail:local:end -->
+
+<!-- agentrail:notes:start -->
+Optional human-maintained local notes.
+<!-- agentrail:notes:end -->
+Then agentrail can safely replace only the global block.
+
+Important rule categories
+Your example should become a global corrective rule:
+
+## Agentrail metadata discipline
+
+When using agentrail saga/steps, changes to agentrail metadata are first-class project changes.
+
+Before ending a task or reporting completion:
+
+1. Run the relevant agentrail status/check command.
+2. Confirm changed agentrail files are tracked.
+3. Commit source changes and agentrail metadata together unless explicitly instructed otherwise.
+4. Push or prepare the branch according to the repo workflow.
+5. Mention the commit hash or unpushed branch state in the handoff.
+That belongs in something like:
+
+global/agentrail-process.md
+incidents/2026-04-28-agentrail-metadata-not-committed.md
+The incident file is useful because it explains why the rule exists.
+
+agentrail launch workflow
+A command like this makes sense:
+
+agentrail launch claude
+agentrail launch codex
+agentrail launch opencode
+What it should do:
+
+1. Read .agentrail/instruction-profile.toml
+2. Fetch or update the central instruction repo
+3. Resolve global + profile + agent-specific instructions
+4. Rewrite generated blocks in CLAUDE.md / AGENTS.md
+5. Record instruction version in .agentrail/instruction-lock.toml
+6. Optionally commit the instruction refresh
+7. Start the requested agent
+Example:
+
+agentrail launch claude --update-instructions --commit
+Could produce:
+
+Updated CLAUDE.md global block:
+  previous: 2026-04-22
+  current:  2026-04-28
+
+Committed:
+  chore(agentrail): refresh shared agent instructions
+Per-repo profile
+Example:
+
+# .agentrail/instruction-profile.toml
+
+profile = "rust-repo"
+agents = ["claude", "codex", "opencode"]
+
+include = [
+  "global/baseline.md",
+  "global/git-hygiene.md",
+  "global/agentrail-process.md",
+  "global/testing.md",
+  "agents/common.md",
+]
+
+[repo]
+preserve_local_sections = true
+require_instruction_lock = true
+Then central profiles/rust-repo.toml can define the shared defaults.
+
+Version tracking
+Use a lock file:
+
+# .agentrail/instruction-lock.toml
+
+instruction_repo = "git@github.com:sw-cli-tools/agent-instructions.git"
+revision = "a8f31c9"
+profile = "rust-repo"
+agent = "claude"
+updated_at = "2026-04-28T08:45:00-07:00"
+
+files = [
+  "CLAUDE.md",
+]
+This gives you reproducibility. Later, if an agent misbehaves, you can ask:
+
+Which version of the shared instructions did it have?
+
+Commands I would add
+Minimal useful set:
+
+agentrail instructions status
+agentrail instructions update
+agentrail instructions diff
+agentrail instructions apply
+agentrail launch claude
+Then later:
+
+agentrail instructions add-rule
+agentrail instructions record-incident
+agentrail instructions audit
+Strong design choice
+I would not make every repo manually vendor a full copy of the central instructions.
+
+Better:
+
+CLAUDE.md / AGENTS.md contains enough generated instruction text for the agent to read.
+.agentrail/instruction-lock.toml records where it came from.
+agentrail refreshes it from the central repo.
+This avoids relying on the agent to follow links or inspect another repo.
+
+Handling different agent formats
+Have one canonical rule source, then render into agent-specific forms:
+
+Canonical fragments:
+  global/git-hygiene.md
+  global/agentrail-process.md
+
+Rendered outputs:
+  CLAUDE.md
+  AGENTS.md
+  CODEX.md
+  OPENCODE.md
+This prevents drift.
+
+The renderer can prepend small agent-specific wrappers, but the core rule text should stay identical.
+
+Recommended MVP
+Build this in stages:
+
+Stage 1: Manual central repo
+Create central markdown fragments and copy/paste as needed.
+
+Stage 2: agentrail instructions apply
+Regenerate marked blocks in CLAUDE.md and AGENTS.md.
+
+Stage 3: Lock file + diff
+Track central repo revision and show what changed.
+
+Stage 4: agentrail launch
+Make launching an agent automatically refresh instructions first.
+
+Stage 5: Incident/rule workflow
+Add a command that turns a mistake into a reusable rule:
+
+agentrail instructions record-incident \
+  --title "Agents forgot to commit agentrail metadata" \
+  --rule global/agentrail-process.md
+My preferred architecture
+Central rule repo
+       |
+       v
+agentrail instructions resolver
+       |
+       v
+generated instruction block in CLAUDE.md / AGENTS.md
+       |
+       v
+agent starts with fresh shared + local instructions
+This gives you the clearing house you want without losing repo-specific knowledge.
+
+One naming suggestion
+For the concept, I like:
+
+agentrail briefing
+Commands:
+
+agentrail briefing status
+agentrail briefing update
+agentrail briefing apply
+agentrail briefing diff
+agentrail launch claude
+“Briefing” fits the model: every agent gets the latest operational briefing before being sent onto the rails.
+
+
+I plan to use this mostly for global agentrail instructions, so prefer not to introduce a new repo to track global instructions, just a new subdir.   Also, agentrail is intalled locally and can cache data under ~/.local/softwarewrighter/cache but I want to ensure that the global instructions are committed/pushed to the agentrail-rs repo.   So, when I want to update agentrail's cache I can reinstall using sw-install.  The agentrail binary can slurp the global instructions at compile time.  The cache might not be needed or renamed to data or tmp if needed as an ephemeral area.  probably isn't needed, right?
+
+Yes — for global agentrail instructions, I’d avoid a new repo.
+
+Better model
+Put the canonical global instructions inside agentrail-rs:
+
+agentrail-rs/
+  agent-instructions/
+    global/
+      baseline.md
+      git-hygiene.md
+      agentrail-saga.md
+      commit-push-discipline.md
+    agents/
+      claude.md
+      codex.md
+      opencode.md
+    profiles/
+      default.toml
+      rust.toml
+Then compile them into the binary with Rust include_str!() / include_dir.
+
+Cache probably not needed
+For this use case, I would not use cache as the source of truth.
+
+Use:
+
+agentrail-rs repo committed/pushed
+        ↓
+sw-install reinstalls/rebuilds agentrail
+        ↓
+agentrail binary contains latest global instructions
+        ↓
+agentrail launch/apply rewrites generated blocks
+That is simpler and safer.
+
+What should be ephemeral?
+~/.local/softwarewrighter/cache should only be for things like:
+
+downloaded temp files
+expanded templates
+last-rendered previews
+tool runtime scratch
+Not canonical rules.
+
+If needed, rename conceptually:
+
+~/.local/softwarewrighter/tmp/agentrail/
+or:
+
+~/.local/softwarewrighter/state/agentrail/
+But for embedded global instructions, even that may be unnecessary.
+
+Recommended command behavior
+agentrail instructions apply
+agentrail launch claude
+Should:
+
+Read embedded global instruction fragments from the binary.
+
+Read repo-local preserved blocks from CLAUDE.md / AGENTS.md.
+
+Replace only marked generated sections.
+
+Leave local sections untouched.
+
+Warn if generated files changed and are not committed.
+
+Compile-time embedding
+Example Rust shape:
+
+pub const GLOBAL_AGENTRAIL: &str =
+    include_str!("../agent-instructions/global/agentrail-saga.md");
+
+pub const GLOBAL_GIT_HYGIENE: &str =
+    include_str!("../agent-instructions/global/git-hygiene.md");
+For many files, use include_dir.
+
+Important guardrail
+Add an agentrail self-check:
+
+agentrail instructions status
+It should report:
+
+Embedded instruction version: git commit abc1234
+Repo CLAUDE.md block:        abc1234
+Status: stale
+Then agents can be told:
+
+Before starting work, run agentrail instructions status.
+If stale, run agentrail instructions apply.
+My recommendation
+Do not use cache for global instructions.
+
+Use:
+
+committed files in agentrail-rs + compile-time embedding + generated blocks in target repos
+That gives you one auditable source of truth, no extra repo, no runtime fetch dependency, and clean propagation through sw-install.
+
+
+
+

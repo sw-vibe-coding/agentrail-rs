@@ -9,6 +9,7 @@ pub mod gen_agents_doc;
 pub mod history;
 pub mod init;
 pub mod insert;
+pub mod instructions;
 pub mod next;
 pub mod plan;
 pub mod reopen;

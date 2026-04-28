@@ -1,0 +1,8 @@
+name = "default"
+description = "Default agentrail briefing — baseline expectations, git hygiene, and metadata discipline."
+
+include = [
+    "global/baseline.md",
+    "global/git-hygiene.md",
+    "global/agentrail-process.md",
+]
