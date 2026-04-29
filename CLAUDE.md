@@ -83,13 +83,13 @@ All runtime data in `.agentrail/` (never `.avoid-compaction/`):
 A central place for shared agent rules. The `agent-instructions/` directory at
 the workspace root holds the canonical fragments; they are bundled into the
 binary at compile time via `include_str!`. Each project's `CLAUDE.md` /
-`AGENTS.md` carries a markered block that the binary regenerates idempotently:
-
-```
-<!-- agentrail:global:start profile=default version=<hash> -->
-... rendered fragments ...
-<!-- agentrail:global:end -->
-```
+`AGENTS.md` carries a markered region that the binary regenerates
+idempotently: an HTML comment of the form `agentrail:global:start ...` opens
+the block and `agentrail:global:end` closes it (see
+`MARKER_START_PREFIX` / `MARKER_END` in
+`crates/agentrail-store/src/instructions.rs` for the exact prefixes — they
+are not reproduced literally here so this documentation does not get
+treated as a real briefing block by `find_block`).
 
 Anything outside the markers is preserved verbatim, so repo-local rules and
 the global briefing coexist in the same file.
