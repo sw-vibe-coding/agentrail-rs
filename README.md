@@ -153,6 +153,19 @@ All runtime data lives in `.agentrail/` (append-only):
 
 **Step Transitions** enforce a valid lifecycle: Pending -> InProgress -> Completed|Blocked.
 
+**Briefing / clearinghouse** is a single source of truth for agent rules shared across many repos. Canonical fragments live in `agent-instructions/` and are bundled into the binary at compile time. Each project's `CLAUDE.md` / `AGENTS.md` carries a markered region that `agentrail instructions apply` regenerates idempotently — local content outside the markers is preserved. `agentrail next` and `agentrail status` warn when a repo's stamped block diverges from the embedded version, and an opt-in `auto_apply = true` in `.agentrail/instruction-profile.toml` flips the warning into an in-place rewrite.
+
+```bash
+agentrail instructions status   # exit 0 = up to date, 1 = stale / no block
+agentrail instructions apply    # render embedded fragments into target files
+agentrail instructions diff     # line-level diff vs. embedded
+agentrail instructions show     # print the rendered default profile body
+agentrail instructions list     # list embedded profiles + fragments
+agentrail next --strict         # refuse to proceed (exit 3) on stale briefing
+```
+
+To update the shared rules: edit fragments under `agent-instructions/`, commit, rebuild (`sw-install -p .`), and run `agentrail instructions apply` in each project on its working branch.
+
 ## Roadmap
 
 | Phase | Description |
