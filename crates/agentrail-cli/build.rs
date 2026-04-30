@@ -1,6 +1,12 @@
 use std::process::Command;
 
 fn main() {
+    // Re-run when HEAD moves so the embedded commit/timestamp doesn't go
+    // stale if main.rs hasn't been touched. Without these, a `cargo build`
+    // after a new commit may keep the old BUILD_COMMIT compiled in.
+    println!("cargo:rerun-if-changed=../../.git/HEAD");
+    println!("cargo:rerun-if-changed=../../.git/refs/heads");
+
     // Git commit hash
     let commit = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
