@@ -185,19 +185,63 @@ pub fn fnv1a_hex(s: &str) -> String {
 
 /// Byte range of the existing markered block (inclusive of both markers and
 /// the trailing newline of the end marker), if present.
+///
+/// Only well-formed start markers count — the line must look exactly like
+/// `<!-- agentrail:global:start profile=<name> version=<hex> -->` (the
+/// shape that [`render_block`] produces). Placeholder forms that show up
+/// in documentation, e.g. `<!-- agentrail:global:start ... -->` or
+/// `version=<hash>`, are intentionally skipped so a CLAUDE.md that
+/// describes the marker syntax does not accidentally get treated as a
+/// briefing block.
 pub fn find_block(s: &str) -> Option<(usize, usize)> {
-    let start_byte = s.find(MARKER_START_PREFIX)?;
-    let after_start_line = match s[start_byte..].find('\n') {
-        Some(i) => start_byte + i + 1,
-        None => return None,
+    let mut pos = 0;
+    while pos < s.len() {
+        let rel = s[pos..].find(MARKER_START_PREFIX)?;
+        let line_start = pos + rel;
+        let line_end = s[line_start..].find('\n').map(|i| line_start + i)?;
+        let line = &s[line_start..line_end];
+        if is_valid_start_marker(line) {
+            let after_start_line = line_end + 1;
+            let end_rel = s[after_start_line..].find(MARKER_END)?;
+            let end_byte = after_start_line + end_rel;
+            let end_line_end = match s[end_byte..].find('\n') {
+                Some(i) => end_byte + i + 1,
+                None => s.len(),
+            };
+            return Some((line_start, end_line_end));
+        }
+        pos = line_end + 1;
+    }
+    None
+}
+
+/// Validate a candidate start-marker line: requires `profile=<non-empty>`
+/// and `version=<hex>` separated by whitespace, terminated with ` -->`.
+fn is_valid_start_marker(line: &str) -> bool {
+    let Some(rest) = line.strip_prefix(MARKER_START_PREFIX) else {
+        return false;
     };
-    let end_rel = s[after_start_line..].find(MARKER_END)?;
-    let end_byte = after_start_line + end_rel;
-    let end_line_end = match s[end_byte..].find('\n') {
-        Some(i) => end_byte + i + 1,
-        None => s.len(),
+    let Some(rest) = rest.strip_prefix(' ') else {
+        return false;
     };
-    Some((start_byte, end_line_end))
+    let Some(rest) = rest.strip_suffix(" -->") else {
+        return false;
+    };
+    let mut has_profile = false;
+    let mut has_version = false;
+    for part in rest.split_whitespace() {
+        if let Some(name) = part.strip_prefix("profile=")
+            && !name.is_empty()
+        {
+            has_profile = true;
+        } else if let Some(v) = part.strip_prefix("version=")
+            && !v.is_empty()
+            && v.chars().all(|c| c.is_ascii_hexdigit())
+        {
+            has_version = true;
+        }
+    }
+    has_profile && has_version
 }
 
 /// Extract the body between markers (without the markers themselves).
@@ -628,6 +672,67 @@ mod tests {
     }
 
     #[test]
+    fn find_block_ignores_documentation_placeholder_markers() {
+        // A doc fence that *describes* the markers but uses placeholder
+        // text should NOT be picked up as a real block.
+        let doc = "# CLAUDE.md\n\nThe briefing block looks like:\n\n```\n<!-- agentrail:global:start profile=default version=<hash> -->\n... rendered ...\n<!-- agentrail:global:end -->\n```\n\nThat's it.\n";
+        assert!(find_block(doc).is_none());
+        assert!(extract_body(doc).is_none());
+    }
+
+    #[test]
+    fn find_block_skips_invalid_then_finds_valid() {
+        // A documentation example precedes a real block — the real block
+        // must still be located.
+        let mixed = "# Doc\n\nExample: `<!-- agentrail:global:start ... -->`\n\n<!-- agentrail:global:start profile=default version=abc123 -->\nbody\n<!-- agentrail:global:end -->\n";
+        let (start, _end) = find_block(mixed).expect("should find real block");
+        assert!(start > 0, "must skip the inline example");
+        let body_text = &mixed[start..];
+        assert!(
+            body_text.starts_with("<!-- agentrail:global:start profile=default version=abc123")
+        );
+    }
+
+    #[test]
+    fn is_valid_start_marker_accepts_real_renders() {
+        assert!(is_valid_start_marker(
+            "<!-- agentrail:global:start profile=default version=abc123 -->"
+        ));
+    }
+
+    #[test]
+    fn is_valid_start_marker_rejects_placeholders_and_malformed() {
+        // placeholder version
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start profile=default version=<hash> -->"
+        ));
+        // missing version
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start profile=default -->"
+        ));
+        // missing profile
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start version=abc123 -->"
+        ));
+        // ellipsis (the natural doc placeholder form)
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start ... -->"
+        ));
+        // no closing -->
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start profile=default version=abc123"
+        ));
+        // empty profile name
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start profile= version=abc123 -->"
+        ));
+        // non-hex version
+        assert!(!is_valid_start_marker(
+            "<!-- agentrail:global:start profile=default version=zzz -->"
+        ));
+    }
+
+    #[test]
     fn replace_or_insert_into_empty_string() {
         let block = "<!-- agentrail:global:start profile=x version=y -->\nhi\n<!-- agentrail:global:end -->\n";
         let (out, had) = replace_or_insert_block("", block);
@@ -647,8 +752,8 @@ mod tests {
 
     #[test]
     fn replace_existing_block_preserves_local_sections() {
-        let existing = "# Project\n\n<!-- agentrail:global:start profile=x version=old -->\nold body\n<!-- agentrail:global:end -->\n\n## Local rules\n\nKeep this.\n";
-        let new_block = "<!-- agentrail:global:start profile=x version=new -->\nnew body\n<!-- agentrail:global:end -->\n";
+        let existing = "# Project\n\n<!-- agentrail:global:start profile=x version=01dd -->\nold body\n<!-- agentrail:global:end -->\n\n## Local rules\n\nKeep this.\n";
+        let new_block = "<!-- agentrail:global:start profile=x version=fee1 -->\nnew body\n<!-- agentrail:global:end -->\n";
         let (out, had) = replace_or_insert_block(existing, new_block);
         assert!(had);
         assert!(out.contains("new body"));
@@ -727,7 +832,7 @@ mod tests {
         let target = tmp.path().join("AGENTS.md");
         std::fs::write(
             &target,
-            "# Project\n\n<!-- agentrail:global:start profile=default version=stale -->\nstale body\n<!-- agentrail:global:end -->\n",
+            "# Project\n\n<!-- agentrail:global:start profile=default version=cafe -->\nstale body\n<!-- agentrail:global:end -->\n",
         )
         .unwrap();
 
