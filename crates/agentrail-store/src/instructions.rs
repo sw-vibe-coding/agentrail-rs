@@ -34,6 +34,10 @@ pub const EMBEDDED_FRAGMENTS: &[(&str, &str)] = &[
         include_str!("../../../agent-instructions/global/agentrail-process.md"),
     ),
     (
+        "global/branch-handoff.md",
+        include_str!("../../../agent-instructions/global/branch-handoff.md"),
+    ),
+    (
         "global/push-discipline.md",
         include_str!("../../../agent-instructions/global/push-discipline.md"),
     ),

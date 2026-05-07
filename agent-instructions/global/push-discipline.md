@@ -1,20 +1,13 @@
 ## Push discipline
 
-A commit that has not been pushed is invisible to the next session, to
-collaborators, and to CI. After `agentrail complete`, push the branch:
-
-```bash
-git push
-```
+When you push (typically after `branch-handoff` has renamed `feat/X`
+to `pr/X` and you're publishing the PR branch), do it safely.
 
 ### Verify push capability before assuming it works
 
-Before retrying or panicking on a failed push, confirm whether this
-checkout is allowed to push at all:
-
-- `git remote get-url origin` — `git@…` (SSH) or `https://…+credential
-  helper` is push-capable; a bare `https://…` with no helper usually
-  is not (read-only mirror).
+- `git remote get-url origin` — `git@…` (SSH) or `https://…` plus a
+  configured credential helper is push-capable. A bare `https://…`
+  with no helper usually is not (read-only mirror or fresh clone).
 - `gh auth status` — if the project uses GitHub PRs and `gh` is not
   authenticated, `gh pr create` will fail.
 - `git push --dry-run` — surfaces auth or branch-protection problems
@@ -29,10 +22,11 @@ checkout is allowed to push at all:
 - Do NOT retry the same `git push` in a loop. If the failure is a
   permission issue (no SSH key, no `gh` auth, sandboxed user), retries
   will not fix it. Surface the failure to the user.
-- This project may have a project-specific handoff convention for
-  sandboxed users (e.g. branch renaming, queue files, CI hooks) — if
-  CLAUDE.md / AGENTS.md describes one outside the briefing markers,
-  follow it instead of pushing.
+- If this project has a project-specific handoff flow (release
+  engineer scans for `pr/*` branches, queue files, CI hooks
+  documented in CLAUDE.md / AGENTS.md outside the briefing markers),
+  follow that instead of pushing — the branch rename from
+  `branch-handoff.md` may already be sufficient.
 
 ### If the remote rejects a push
 
