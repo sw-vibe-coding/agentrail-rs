@@ -17,7 +17,7 @@ pub fn run(saga_path: &Path, action: Action) -> Result<u8> {
         Action::Status => status(saga_path).map(|stale| if stale { 1 } else { 0 }),
         Action::Apply => apply(saga_path).map(|_| 0),
         Action::Diff => diff(saga_path).map(|differs| if differs { 1 } else { 0 }),
-        Action::Show => show().map(|_| 0),
+        Action::Show => show(saga_path).map(|_| 0),
         Action::List => list().map(|_| 0),
     }
 }
@@ -114,7 +114,8 @@ fn describe_outcome(o: &ApplyOutcome) -> &'static str {
 
 fn diff(saga_path: &Path) -> Result<bool> {
     let (profile, targets) = instructions::resolve_targets(saga_path)?;
-    let embedded_body = instructions::render_body(&profile)?;
+    let (_, exclude) = instructions::resolve_render_inputs(saga_path)?;
+    let embedded_body = instructions::render_body(&profile, &exclude)?;
     let embedded_hash = instructions::fnv1a_hex(&embedded_body);
 
     if targets.is_empty() {
@@ -209,8 +210,13 @@ fn lcs_table(a: &[&str], b: &[&str]) -> Vec<Vec<usize>> {
     t
 }
 
-fn show() -> Result<()> {
-    let body = instructions::render_body("default")?;
+fn show(saga_path: &Path) -> Result<()> {
+    // Saga-aware preview: render the body that `apply` would write here,
+    // honoring profile + exclude from `.agentrail/instruction-profile.toml`.
+    // Without a saga directory, this falls back to the embedded default
+    // with no excludes.
+    let (profile, exclude) = instructions::resolve_render_inputs(saga_path)?;
+    let body = instructions::render_body(&profile, &exclude)?;
     println!("{body}");
     Ok(())
 }

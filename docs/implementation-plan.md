@@ -186,6 +186,81 @@ on failure or for semantic work.
 
 **Estimated scope**: ~300 lines, ~10 tests.
 
+## Briefing system — deferred items
+
+The briefing / clearinghouse system (`agentrail instructions {status, apply,
+diff, show, list}`, embedded `agent-instructions/` fragments, markered
+regions in CLAUDE.md / AGENTS.md, freshness check on `agentrail next`,
+`auto_apply`, and per-repo `exclude`) is shipped. The list below tracks
+deferred extensions — none are required to use the system today, but each
+addresses a specific friction point users have already raised.
+
+### Bundled alt profiles
+
+**Idea:** ship one or more named profiles alongside `default`, e.g.
+`no-push` (default minus `global/push-discipline.md`), `minimal` (just
+`baseline.md` + `session-protocol.md`).
+
+**Status:** not done. `exclude` in `instruction-profile.toml` covers the
+same use case per-repo without imposing maintenance burden on
+agent-instructions/. Add a named profile only if the same exclude pattern
+turns up in 3+ repos.
+
+**Effort:** small. Add a TOML file under `agent-instructions/profiles/`
+and a `(name, content)` entry in `EMBEDDED_PROFILES`.
+
+### Per-target rendering shapes
+
+**Idea:** let `instruction-profile.toml` configure different content for
+CLAUDE.md vs AGENTS.md (e.g. AGENTS.md gets a thin pointer + briefing
+block, CLAUDE.md gets the full block alongside repo-local rules). Today
+both targets receive the identical rendered body.
+
+**Status:** not done. `agentrail setup` now creates a thin AGENTS.md
+pointer and a fuller CLAUDE.md as separate stubs, so the local content
+already differs — but the briefing block stamped into each is
+byte-identical. A `target_template` mechanism could let the profile
+specify which fragments go to which target.
+
+**Effort:** medium. Either a per-target include list, or a render-time
+filter keyed on the target file name.
+
+### `--exclude` CLI flag on `apply`
+
+**Idea:** support `agentrail instructions apply --exclude
+global/push-discipline.md` for ad-hoc tweaks without editing
+`instruction-profile.toml`.
+
+**Status:** not done. Config-file persistence is the primary surface
+because excludes need to survive across re-applies; a CLI flag would
+have to be re-passed on every apply, which is fragile.
+
+**Effort:** small. Add an optional `Vec<String>` flag to the apply
+subcommand and pass through to `apply_to_file` / `apply`.
+
+### Conflict detection
+
+**Idea:** warn when project-specific text outside the markered region
+contradicts a directive inside it (e.g. CLAUDE.md says "use `git add
+-A`" while `global/git-hygiene.md` says the opposite).
+
+**Status:** not done. Hard to detect without semantic understanding of
+the prose. A possible weak heuristic: lint for known anti-patterns
+(`git add -A`, `--no-verify`, etc.) against the local sections.
+
+**Effort:** medium-large. Heuristic-based at first, with false-positive
+risk.
+
+### Saga-aware `instructions show` (DONE)
+
+**Idea:** make `agentrail instructions show` print the body that `apply`
+would render in the current repo (honoring `profile` + `exclude`),
+rather than always printing the embedded default.
+
+**Status:** done. `show` reads `.agentrail/instruction-profile.toml`
+when available and falls back to the embedded default with no excludes
+when run outside a saga.
+
 ## Migration from Original Plan
 
 | Original phase | New phase | Changes |

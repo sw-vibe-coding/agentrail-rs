@@ -111,9 +111,18 @@ round-trip.
 
 Per-repo override (optional, `.agentrail/instruction-profile.toml`):
 ```toml
-profile = "default"
+profile = "default"                    # name of an embedded profile
 targets = ["CLAUDE.md", "AGENTS.md"]   # default: any of these that exist
+auto_apply = false                     # if true, `agentrail next` rewrites stale blocks in-place
+exclude = ["global/push-discipline.md"]  # fragment paths to drop from the profile's include list
 ```
+
+`exclude` removes individual fragments from the resolved profile's
+`include` list at render time. The lock-file hash, the status check, and
+the diff command all reflect the post-exclude body, so a repo that
+intentionally drops a rule stays "up to date" without churning. Unknown
+exclude entries (e.g. a fragment renamed upstream) are silently ignored
+so per-repo configs survive maintainer-side renames.
 
 ## Key Documentation
 

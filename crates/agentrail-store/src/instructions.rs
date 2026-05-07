@@ -83,7 +83,7 @@ struct EmbeddedProfile {
 ///
 /// All fields are optional. Defaults: profile = "default", targets =
 /// auto-detected from `CLAUDE.md` and `AGENTS.md` in the project root,
-/// auto_apply = false.
+/// auto_apply = false, exclude = [].
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct UserProfile {
     #[serde(default)]
@@ -96,6 +96,13 @@ pub struct UserProfile {
     /// refresh before `agentrail complete`.
     #[serde(default)]
     pub auto_apply: bool,
+    /// Fragment paths to drop from the resolved profile's `include` list at
+    /// render time, e.g. `["global/push-discipline.md"]`. Entries that
+    /// don't match any fragment in the profile are silently ignored, so a
+    /// user's exclude list keeps working when the profile maintainer
+    /// renames or removes a fragment upstream.
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 /// Lock file written to `.agentrail/instruction-lock.toml` after each apply.
@@ -123,9 +130,14 @@ const DEFAULT_PROFILE_NAME: &str = "default";
 // Render & hash
 // ---------------------------------------------------------------------------
 
-/// Render the canonical body of a profile by concatenating its fragments.
-/// Does NOT include the markers; use [`render_block`] for the full block.
-pub fn render_body(profile_name: &str) -> Result<String> {
+/// Render the canonical body of a profile by concatenating its fragments,
+/// dropping any whose path appears in `exclude`. Does NOT include the
+/// markers; use [`render_block`] for the full block.
+///
+/// Pass `exclude = &[]` for the unmodified default. Excluded paths that
+/// don't match any include are silently skipped so per-repo configs stay
+/// forward-compatible across upstream fragment renames.
+pub fn render_body(profile_name: &str, exclude: &[String]) -> Result<String> {
     let raw = lookup_profile(profile_name).ok_or_else(|| {
         Error::Other(format!(
             "Unknown agentrail briefing profile: '{profile_name}'. \
@@ -140,6 +152,9 @@ pub fn render_body(profile_name: &str) -> Result<String> {
     let profile: EmbeddedProfile = toml::from_str(raw)?;
     let mut out = String::new();
     for include in &profile.include {
+        if exclude.iter().any(|e| e == include) {
+            continue;
+        }
         let frag = lookup_fragment(include).ok_or_else(|| {
             Error::Other(format!(
                 "Briefing fragment '{include}' not embedded in this binary. \
@@ -154,10 +169,10 @@ pub fn render_body(profile_name: &str) -> Result<String> {
 }
 
 /// Render the full markered block: start marker + body + end marker, with a
-/// trailing newline. Stable for a given profile + body — re-renders are
-/// byte-identical.
-pub fn render_block(profile_name: &str) -> Result<String> {
-    let body = render_body(profile_name)?;
+/// trailing newline. Stable for a given profile + exclude pair — re-renders
+/// are byte-identical.
+pub fn render_block(profile_name: &str, exclude: &[String]) -> Result<String> {
+    let body = render_body(profile_name, exclude)?;
     let hash = fnv1a_hex(&body);
     Ok(format!(
         "{MARKER_START_PREFIX} profile={profile_name} version={hash} -->\n\
@@ -166,6 +181,17 @@ pub fn render_block(profile_name: &str) -> Result<String> {
          {body}\n\
          {MARKER_END}\n"
     ))
+}
+
+/// Resolve the profile name and effective excludes for a saga path, reading
+/// `.agentrail/instruction-profile.toml` if present.
+pub fn resolve_render_inputs(saga_path: &Path) -> Result<(String, Vec<String>)> {
+    let user = load_user_profile(saga_path).unwrap_or_default();
+    let profile = user
+        .profile
+        .clone()
+        .unwrap_or_else(|| DEFAULT_PROFILE_NAME.to_string());
+    Ok((profile, user.exclude))
 }
 
 /// Stable, deterministic hash. Not cryptographic — just enough to detect
@@ -383,8 +409,12 @@ pub struct ApplyOutcome {
 
 /// Apply the rendered block to a single target file. Creates the file if it
 /// does not exist (with the briefing as the only content).
-pub fn apply_to_file(target: &Path, profile_name: &str) -> Result<ApplyOutcome> {
-    let block = render_block(profile_name)?;
+pub fn apply_to_file(
+    target: &Path,
+    profile_name: &str,
+    exclude: &[String],
+) -> Result<ApplyOutcome> {
+    let block = render_block(profile_name, exclude)?;
     let (existing, created_file) = match std::fs::read_to_string(target) {
         Ok(s) => (s, false),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), true),
@@ -427,12 +457,13 @@ pub fn apply(saga_path: &Path) -> Result<(String, Vec<ApplyOutcome>)> {
         ));
     }
 
+    let user = load_user_profile(saga_path).unwrap_or_default();
     let mut outcomes = Vec::with_capacity(targets.len());
     for t in &targets {
-        outcomes.push(apply_to_file(t, &profile)?);
+        outcomes.push(apply_to_file(t, &profile, &user.exclude)?);
     }
 
-    let body = render_body(&profile)?;
+    let body = render_body(&profile, &user.exclude)?;
     let lock = InstructionLock {
         profile: profile.clone(),
         content_hash: fnv1a_hex(&body),
@@ -480,7 +511,8 @@ pub struct StatusReport {
 
 pub fn status(saga_path: &Path) -> Result<StatusReport> {
     let (profile, targets) = resolve_targets(saga_path)?;
-    let body = render_body(&profile)?;
+    let user = load_user_profile(saga_path).unwrap_or_default();
+    let body = render_body(&profile, &user.exclude)?;
     let embedded_hash = fnv1a_hex(&body);
     let lock = load_lock(saga_path)?;
 
@@ -645,7 +677,7 @@ mod tests {
 
     #[test]
     fn embedded_default_profile_renders() {
-        let body = render_body("default").unwrap();
+        let body = render_body("default", &[]).unwrap();
         assert!(body.contains("Agentrail metadata discipline"));
         assert!(body.contains("Git hygiene"));
         assert!(body.contains("Baseline expectations"));
@@ -656,7 +688,7 @@ mod tests {
 
     #[test]
     fn unknown_profile_errors() {
-        let err = render_body("does-not-exist").unwrap_err();
+        let err = render_body("does-not-exist", &[]).unwrap_err();
         assert!(
             err.to_string()
                 .contains("Unknown agentrail briefing profile")
@@ -665,9 +697,9 @@ mod tests {
 
     #[test]
     fn render_block_round_trips_via_extract_body() {
-        let block = render_block("default").unwrap();
+        let block = render_block("default", &[]).unwrap();
         let extracted = extract_body(&block).expect("block parses");
-        let body = render_body("default").unwrap();
+        let body = render_body("default", &[]).unwrap();
         assert_eq!(extracted, body);
     }
 
@@ -766,7 +798,7 @@ mod tests {
     fn apply_to_missing_file_creates_it() {
         let tmp = tempdir().unwrap();
         let target = tmp.path().join("AGENTS.md");
-        let outcome = apply_to_file(&target, "default").unwrap();
+        let outcome = apply_to_file(&target, "default", &[]).unwrap();
         assert!(outcome.created_file);
         assert!(outcome.changed);
         assert!(target.is_file());
@@ -780,10 +812,10 @@ mod tests {
         let target = tmp.path().join("CLAUDE.md");
         std::fs::write(&target, "# Project\n\nLocal notes.\n").unwrap();
 
-        let first = apply_to_file(&target, "default").unwrap();
+        let first = apply_to_file(&target, "default", &[]).unwrap();
         assert!(first.changed);
 
-        let second = apply_to_file(&target, "default").unwrap();
+        let second = apply_to_file(&target, "default", &[]).unwrap();
         assert!(!second.changed, "second apply must be a no-op");
     }
 
@@ -971,5 +1003,94 @@ mod tests {
         // CLAUDE.md was NOT modified.
         let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
         assert!(!body.contains("agentrail:global:start"));
+    }
+
+    #[test]
+    fn exclude_drops_named_fragment_from_render() {
+        let full = render_body("default", &[]).unwrap();
+        let trimmed = render_body(
+            "default",
+            &["global/push-discipline.md".to_string()],
+        )
+        .unwrap();
+        assert!(full.contains("Push discipline"));
+        assert!(!trimmed.contains("Push discipline"));
+        // Other fragments still present
+        assert!(trimmed.contains("Agentrail metadata discipline"));
+        assert!(trimmed.contains("Git hygiene"));
+        // Hashes differ accordingly
+        assert_ne!(fnv1a_hex(&full), fnv1a_hex(&trimmed));
+    }
+
+    #[test]
+    fn exclude_with_unknown_path_is_silently_ignored() {
+        let full = render_body("default", &[]).unwrap();
+        let with_typo = render_body(
+            "default",
+            &["global/does-not-exist.md".to_string()],
+        )
+        .unwrap();
+        // Typo'd exclude entries don't match anything → render is unchanged.
+        assert_eq!(full, with_typo);
+    }
+
+    #[test]
+    fn apply_with_user_exclude_writes_post_exclude_lock_hash() {
+        let tmp = tempdir().unwrap();
+        let saga = tmp.path().join(".agentrail");
+        std::fs::create_dir_all(&saga).unwrap();
+        std::fs::write(
+            saga.join("instruction-profile.toml"),
+            "profile = \"default\"\nexclude = [\"global/push-discipline.md\"]\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+
+        apply(tmp.path()).unwrap();
+
+        // Stamped block omits push discipline.
+        let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
+        assert!(!body.contains("Push discipline"));
+        assert!(body.contains("Agentrail metadata discipline"));
+
+        // Lock hash matches the post-exclude render.
+        let lock = load_lock(tmp.path()).unwrap().unwrap();
+        let expected = fnv1a_hex(
+            &render_body(
+                "default",
+                &["global/push-discipline.md".to_string()],
+            )
+            .unwrap(),
+        );
+        assert_eq!(lock.content_hash, expected);
+
+        // Status reports up to date — the embedded_hash respects exclude too.
+        let report = status(tmp.path()).unwrap();
+        assert_eq!(report.targets[0].status, TargetStatus::UpToDate);
+        assert_eq!(report.embedded_hash, expected);
+    }
+
+    #[test]
+    fn changing_exclude_marks_briefing_stale() {
+        let tmp = tempdir().unwrap();
+        let saga = tmp.path().join(".agentrail");
+        std::fs::create_dir_all(&saga).unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+
+        // Apply with no excludes.
+        apply(tmp.path()).unwrap();
+        assert_eq!(
+            status(tmp.path()).unwrap().targets[0].status,
+            TargetStatus::UpToDate
+        );
+
+        // Now configure an exclude — same lock as before, new desired body.
+        std::fs::write(
+            saga.join("instruction-profile.toml"),
+            "profile = \"default\"\nexclude = [\"global/push-discipline.md\"]\n",
+        )
+        .unwrap();
+        let after = status(tmp.path()).unwrap();
+        assert_eq!(after.targets[0].status, TargetStatus::Stale);
     }
 }
