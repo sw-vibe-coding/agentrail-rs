@@ -6,6 +6,64 @@ use crate::saga;
 
 const ARCHIVE_DIR: &str = ".agentrail-archive";
 
+/// One archived saga, as enumerated by [`list_archives`]. The `dir` is a
+/// drop-in replacement for `saga::saga_dir(...)` — it has the same
+/// `saga.toml` / `plan.md` / `steps/` / `trajectories/` layout, so step
+/// and trajectory readers work on it directly.
+#[derive(Debug, Clone)]
+pub struct ArchivedSaga {
+    pub dir: PathBuf,
+    pub config: SagaConfig,
+    /// The directory-name suffix that follows `<saga-name>-`. Usually a
+    /// timestamp like `20260418T135657`, possibly with a `-2`/`-3`
+    /// collision counter.
+    pub suffix: String,
+    pub reason: Option<String>,
+}
+
+/// Enumerate all archived sagas under `.agentrail-archive/`, newest first.
+/// Returns an empty vec if there is no archive directory.
+pub fn list_archives(path: &Path) -> Result<Vec<ArchivedSaga>> {
+    let archive_base = path.join(ARCHIVE_DIR);
+    if !archive_base.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&archive_base)? {
+        let entry = entry?;
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let saga_toml = dir.join("saga.toml");
+        if !saga_toml.is_file() {
+            continue;
+        }
+        let raw = std::fs::read_to_string(&saga_toml)?;
+        let config: SagaConfig = toml::from_str(&raw)?;
+        let dir_name = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+        let prefix = format!("{}-", config.name);
+        let suffix = dir_name
+            .strip_prefix(&prefix)
+            .map(|s| s.to_string())
+            .unwrap_or(dir_name);
+        let reason = std::fs::read_to_string(dir.join("archive-reason.txt")).ok();
+        out.push(ArchivedSaga {
+            dir,
+            config,
+            suffix,
+            reason,
+        });
+    }
+    // Sort newest first by suffix (timestamps sort lexicographically).
+    out.sort_by(|a, b| b.suffix.cmp(&a.suffix));
+    Ok(out)
+}
+
 /// Archive the current saga by moving .agentrail/ contents into
 /// .agentrail-archive/<name>-<timestamp>/.
 ///
@@ -123,6 +181,50 @@ mod tests {
         saga::init_saga(root, "second-saga", "# Plan 2").unwrap();
         let config = saga::load_saga(root).unwrap();
         assert_eq!(config.name, "second-saga");
+    }
+
+    #[test]
+    fn list_archives_returns_empty_when_no_archive_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archives = list_archives(tmp.path()).unwrap();
+        assert!(archives.is_empty());
+    }
+
+    #[test]
+    fn list_archives_finds_archived_sagas_newest_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        // Archive two sagas; force ordering by hand-creating dirs with
+        // distinct suffixes (timestamp() may collide within a second).
+        std::fs::create_dir_all(root.join(".agentrail-archive/old-saga-20260101T000000")).unwrap();
+        std::fs::write(
+            root.join(".agentrail-archive/old-saga-20260101T000000/saga.toml"),
+            "name = \"old-saga\"\nstatus = \"completed\"\ncurrent_step = 0\ncreated_at = \"2026-01-01\"\nplan_file = \".agentrail/plan.md\"\nretroactive = false\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join(".agentrail-archive/old-saga-20260101T000000/archive-reason.txt"),
+            "shipped",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(root.join(".agentrail-archive/new-saga-20260301T000000")).unwrap();
+        std::fs::write(
+            root.join(".agentrail-archive/new-saga-20260301T000000/saga.toml"),
+            "name = \"new-saga\"\nstatus = \"active\"\ncurrent_step = 3\ncreated_at = \"2026-03-01\"\nplan_file = \".agentrail/plan.md\"\nretroactive = false\n",
+        )
+        .unwrap();
+
+        let archives = list_archives(root).unwrap();
+        assert_eq!(archives.len(), 2);
+        // Newest first.
+        assert_eq!(archives[0].config.name, "new-saga");
+        assert_eq!(archives[1].config.name, "old-saga");
+        assert_eq!(archives[0].suffix, "20260301T000000");
+        assert_eq!(archives[1].suffix, "20260101T000000");
+        assert!(archives[0].reason.is_none());
+        assert_eq!(archives[1].reason.as_deref(), Some("shipped"));
     }
 
     #[test]

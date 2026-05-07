@@ -327,6 +327,28 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// Generate a self-contained HTML report of saga state and open it
+    ///
+    /// Three tabs: Status (current saga + steps), History (archived
+    /// sagas), Plans (pending steps ahead of the cursor). Per-step
+    /// expansion shows prompt, summary, recorded commits (linked to
+    /// GitHub when origin is github.com/<org>/<repo>), and recorded
+    /// trajectories. Per-saga progress bars and a top-of-page summary
+    /// strip surface "where am I" at a glance.
+    ///
+    /// The output HTML is single-file, no external assets — system-aware
+    /// dark/light theme via `prefers-color-scheme`, vanilla JS for tab
+    /// switching, native `<details>` for collapse. Defaults to writing
+    /// `.agentrail/view.html` and opening it; pass `--no-open` to print
+    /// the path/URL only, or `--output <path>` to write elsewhere.
+    View {
+        /// Output HTML path (default: `.agentrail/view.html`)
+        #[arg(long)]
+        output: Option<String>,
+        /// Don't open the browser; print the path/URL instead
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Manage shared agent briefing — the global instructions clearinghouse
     ///
     /// Renders embedded `agent-instructions/` fragments into a markered
@@ -574,6 +596,13 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         Commands::Snapshot { list } => {
             let args = commands::snapshot::SnapshotArgs { list };
             commands::snapshot::run(saga_path, &args).map(|_| 0)
+        }
+        Commands::View { output, no_open } => {
+            let args = commands::view::ViewArgs {
+                output: output.as_deref(),
+                no_open,
+            };
+            commands::view::run(saga_path, &args).map(|_| 0)
         }
         Commands::Instructions { action } => {
             let act = match action {

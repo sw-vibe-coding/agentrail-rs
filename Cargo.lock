@@ -10,6 +10,7 @@ dependencies = [
  "agentrail-exec",
  "agentrail-store",
  "agentrail-validate",
+ "chrono",
  "clap",
  "serde",
  "serde_json",
