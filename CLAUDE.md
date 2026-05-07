@@ -100,8 +100,13 @@ Commands:
 - `agentrail instructions apply` — render the embedded block into the resolved
   targets and write `.agentrail/instruction-lock.toml`. Idempotent.
 - `agentrail instructions diff` — line-level diff between embedded and current.
-- `agentrail instructions show` — print the rendered default profile body.
+- `agentrail instructions show` — preview the body that `apply` would render
+  here (saga-aware: honors profile + exclude from instruction-profile.toml).
 - `agentrail instructions list` — list embedded profiles and fragments.
+- `agentrail instructions profile {show, set-profile, set-targets, add-exclude,
+  rm-exclude, auto-apply}` — manage `instruction-profile.toml` without
+  hand-editing. `add-exclude` validates the fragment path against the
+  embedded set, so typos surface immediately.
 
 Update flow: edit `agent-instructions/<...>.md` → commit → rebuild
 (`sw-install`) → in each project, `agentrail instructions apply` →

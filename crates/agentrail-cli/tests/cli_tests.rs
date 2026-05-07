@@ -971,6 +971,128 @@ fn next_silent_when_briefing_not_opted_in() {
 }
 
 #[test]
+fn instructions_profile_add_exclude_writes_config_and_rejects_typos() {
+    let tmp = tempdir().unwrap();
+
+    // Show on a bare repo prints defaults without error.
+    let code = instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::Show),
+    )
+    .unwrap();
+    assert_eq!(code, 0);
+
+    // add-exclude with a known fragment writes the file.
+    instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::AddExclude(
+            "global/push-discipline.md".to_string(),
+        )),
+    )
+    .unwrap();
+
+    let toml = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
+        .unwrap();
+    assert!(toml.contains("exclude"));
+    assert!(toml.contains("push-discipline"));
+
+    // Repeating the same add-exclude is idempotent (no duplicate entries).
+    instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::AddExclude(
+            "global/push-discipline.md".to_string(),
+        )),
+    )
+    .unwrap();
+    let toml2 = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
+        .unwrap();
+    assert_eq!(
+        toml2.matches("push-discipline").count(),
+        1,
+        "duplicate add-exclude must be a no-op"
+    );
+
+    // rm-exclude removes it.
+    instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::RmExclude(
+            "global/push-discipline.md".to_string(),
+        )),
+    )
+    .unwrap();
+    let toml3 = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
+        .unwrap();
+    assert!(!toml3.contains("push-discipline"));
+
+    // add-exclude with unknown fragment errors with a helpful message.
+    let err = instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::AddExclude(
+            "global/does-not-exist.md".to_string(),
+        )),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("Unknown fragment"));
+    assert!(err.to_string().contains("Embedded fragments"));
+}
+
+#[test]
+fn instructions_profile_set_targets_and_auto_apply() {
+    let tmp = tempdir().unwrap();
+
+    instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::SetTargets(vec![
+            "AGENTS.md".to_string(),
+        ])),
+    )
+    .unwrap();
+    instructions::run(
+        tmp.path(),
+        instructions::Action::Profile(instructions::ProfileEdit::AutoApply(true)),
+    )
+    .unwrap();
+
+    let toml = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
+        .unwrap();
+    assert!(toml.contains("targets"));
+    assert!(toml.contains("AGENTS.md"));
+    assert!(toml.contains("auto_apply"));
+    assert!(toml.contains("true"));
+}
+
+#[test]
+fn instructions_apply_honors_user_profile_exclude() {
+    let tmp = tempdir().unwrap();
+    let saga = tmp.path().join(".agentrail");
+    std::fs::create_dir_all(&saga).unwrap();
+    std::fs::write(
+        saga.join("instruction-profile.toml"),
+        "profile = \"default\"\nexclude = [\"global/push-discipline.md\"]\ntargets = [\"CLAUDE.md\"]\n",
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("CLAUDE.md"), "# P\n").unwrap();
+
+    let code = instructions::run(tmp.path(), instructions::Action::Apply).unwrap();
+    assert_eq!(code, 0);
+
+    let body = std::fs::read_to_string(tmp.path().join("CLAUDE.md")).unwrap();
+    assert!(body.contains("Agentrail metadata discipline"));
+    assert!(
+        !body.contains("Push discipline"),
+        "excluded fragment must not appear in stamped block"
+    );
+
+    // Status reports up to date — the post-exclude hash matches.
+    let status_code = instructions::run(tmp.path(), instructions::Action::Status).unwrap();
+    assert_eq!(status_code, 0);
+
+    // Diff is silent (clean).
+    let diff_code = instructions::run(tmp.path(), instructions::Action::Diff).unwrap();
+    assert_eq!(diff_code, 0);
+}
+
+#[test]
 fn next_auto_apply_refreshes_block_in_place() {
     let tmp = tempdir().unwrap();
     let saga = tmp.path().join(".agentrail");

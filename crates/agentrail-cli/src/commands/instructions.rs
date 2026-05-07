@@ -1,6 +1,7 @@
-use agentrail_core::error::Result;
+use agentrail_core::error::{Error, Result};
 use agentrail_store::instructions::{
     self, ApplyOutcome, EMBEDDED_FRAGMENTS, EMBEDDED_PROFILES, StatusReport, TargetStatus,
+    UserProfile,
 };
 use std::path::Path;
 
@@ -10,6 +11,16 @@ pub enum Action {
     Diff,
     Show,
     List,
+    Profile(ProfileEdit),
+}
+
+pub enum ProfileEdit {
+    Show,
+    SetProfile(String),
+    SetTargets(Vec<String>),
+    AddExclude(String),
+    RmExclude(String),
+    AutoApply(bool),
 }
 
 pub fn run(saga_path: &Path, action: Action) -> Result<u8> {
@@ -19,7 +30,72 @@ pub fn run(saga_path: &Path, action: Action) -> Result<u8> {
         Action::Diff => diff(saga_path).map(|differs| if differs { 1 } else { 0 }),
         Action::Show => show(saga_path).map(|_| 0),
         Action::List => list().map(|_| 0),
+        Action::Profile(edit) => profile_edit(saga_path, edit).map(|_| 0),
     }
+}
+
+fn profile_edit(saga_path: &Path, edit: ProfileEdit) -> Result<()> {
+    match edit {
+        ProfileEdit::Show => profile_show(saga_path),
+        ProfileEdit::SetProfile(name) => mutate_profile(saga_path, |p| {
+            p.profile = Some(name);
+        }),
+        ProfileEdit::SetTargets(paths) => mutate_profile(saga_path, |p| {
+            p.targets = paths;
+        }),
+        ProfileEdit::AddExclude(fragment) => {
+            // Validate against embedded fragments so we surface typos early.
+            let known: Vec<&str> = EMBEDDED_FRAGMENTS.iter().map(|(p, _)| *p).collect();
+            if !known.contains(&fragment.as_str()) {
+                return Err(Error::Other(format!(
+                    "Unknown fragment '{fragment}'. Embedded fragments:\n  {}",
+                    known.join("\n  ")
+                )));
+            }
+            mutate_profile(saga_path, |p| {
+                if !p.exclude.iter().any(|e| e == &fragment) {
+                    p.exclude.push(fragment);
+                }
+            })
+        }
+        ProfileEdit::RmExclude(fragment) => mutate_profile(saga_path, |p| {
+            p.exclude.retain(|e| e != &fragment);
+        }),
+        ProfileEdit::AutoApply(enable) => mutate_profile(saga_path, |p| {
+            p.auto_apply = enable;
+        }),
+    }
+}
+
+fn mutate_profile<F: FnOnce(&mut UserProfile)>(saga_path: &Path, f: F) -> Result<()> {
+    let mut profile = instructions::load_user_profile(saga_path).unwrap_or_default();
+    f(&mut profile);
+    instructions::save_user_profile(saga_path, &profile)?;
+    println!("Wrote .agentrail/instruction-profile.toml.");
+    println!("Run `agentrail instructions diff` to see the effect, or `apply` to install it.");
+    Ok(())
+}
+
+fn profile_show(saga_path: &Path) -> Result<()> {
+    let profile = instructions::load_user_profile(saga_path).unwrap_or_default();
+    println!("# .agentrail/instruction-profile.toml");
+    println!();
+    match &profile.profile {
+        Some(p) => println!("profile     = \"{p}\""),
+        None => println!("profile     = (default — embedded \"default\")"),
+    }
+    if profile.targets.is_empty() {
+        println!("targets     = (auto-detected: CLAUDE.md, AGENTS.md if they exist)");
+    } else {
+        println!("targets     = {:?}", profile.targets);
+    }
+    println!("auto_apply  = {}", profile.auto_apply);
+    if profile.exclude.is_empty() {
+        println!("exclude     = []");
+    } else {
+        println!("exclude     = {:?}", profile.exclude);
+    }
+    Ok(())
 }
 
 fn status(saga_path: &Path) -> Result<bool> {

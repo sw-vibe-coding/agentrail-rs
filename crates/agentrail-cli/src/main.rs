@@ -339,6 +339,29 @@ enum Commands {
     /// root and is bundled into the binary at compile time. To change the
     /// shared rules: edit the fragments, commit, rebuild (e.g. `sw-install`),
     /// and re-run `agentrail instructions apply` in each project.
+    ///
+    /// PER-REPO CONFIG (.agentrail/instruction-profile.toml, all optional):
+    ///
+    ///   profile     = "default"                       # name of an embedded profile;
+    ///                                                 #   see `instructions list`
+    ///   targets     = ["CLAUDE.md", "AGENTS.md"]      # files that receive the
+    ///                                                 #   briefing block; defaults
+    ///                                                 #   to whichever of those two
+    ///                                                 #   already exist
+    ///   auto_apply  = false                           # if true, `agentrail next`
+    ///                                                 #   rewrites stale blocks
+    ///                                                 #   in-place + tells the agent
+    ///                                                 #   to re-read CLAUDE.md
+    ///   exclude     = ["global/push-discipline.md"]   # fragment paths to drop from
+    ///                                                 #   the resolved profile;
+    ///                                                 #   unknown entries are
+    ///                                                 #   silently ignored so
+    ///                                                 #   per-repo configs survive
+    ///                                                 #   maintainer-side renames
+    ///
+    /// The lock-file content_hash, the freshness check, and the diff command
+    /// all reflect the post-exclude render, so a repo that intentionally
+    /// drops a fragment stays "up to date" without churn.
     Instructions {
         #[command(subcommand)]
         action: InstructionsAction,
@@ -358,10 +381,68 @@ enum InstructionsAction {
     ///
     /// Exits 0 if every target is up to date, 1 if any differ.
     Diff,
-    /// Print the rendered default profile body to stdout
+    /// Preview the body that `apply` would render in this repo
+    ///
+    /// Reads `.agentrail/instruction-profile.toml` if present, honoring
+    /// `profile` and `exclude`. Outside a saga directory (or with no
+    /// profile config), prints the embedded default profile with no
+    /// excludes. This is a saga-aware preview, NOT a snapshot of what is
+    /// currently in CLAUDE.md / AGENTS.md — use `diff` for that.
     Show,
     /// List embedded profiles and fragments bundled into this binary
     List,
+    /// Manage `.agentrail/instruction-profile.toml` without hand-editing
+    ///
+    /// All write subcommands create the file (and `.agentrail/`) if
+    /// missing. After any change, run `agentrail instructions diff` or
+    /// `apply` to see / install the effect.
+    Profile {
+        #[command(subcommand)]
+        action: ProfileAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProfileAction {
+    /// Print the current per-repo profile (or the empty defaults)
+    Show,
+    /// Set the embedded profile name (e.g. "default")
+    SetProfile {
+        /// Profile name from `instructions list` (currently only "default")
+        name: String,
+    },
+    /// Set the target file list, replacing any existing entries
+    ///
+    /// Pass relative paths from the repo root, e.g.
+    /// `agentrail instructions profile set-targets CLAUDE.md AGENTS.md`.
+    /// To restore auto-detection (whichever of CLAUDE.md / AGENTS.md
+    /// already exist), pass no arguments.
+    SetTargets {
+        /// Target file paths (relative to repo root)
+        paths: Vec<String>,
+    },
+    /// Add a fragment path to the exclude list
+    ///
+    /// Use a path from `instructions list`, e.g.
+    /// `agentrail instructions profile add-exclude global/push-discipline.md`.
+    AddExclude {
+        /// Fragment path (must match an entry in `instructions list`)
+        fragment: String,
+    },
+    /// Remove a fragment path from the exclude list
+    RmExclude {
+        /// Fragment path previously added with `add-exclude`
+        fragment: String,
+    },
+    /// Toggle auto_apply on or off
+    ///
+    /// When on, `agentrail next` rewrites a stale briefing block in place
+    /// and tells the agent to re-read CLAUDE.md before proceeding. When
+    /// off (default), `next` only prints a warning.
+    AutoApply {
+        /// `true` or `false`
+        enable: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -487,6 +568,27 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
                 InstructionsAction::Diff => commands::instructions::Action::Diff,
                 InstructionsAction::Show => commands::instructions::Action::Show,
                 InstructionsAction::List => commands::instructions::Action::List,
+                InstructionsAction::Profile { action } => {
+                    let p = match action {
+                        ProfileAction::Show => commands::instructions::ProfileEdit::Show,
+                        ProfileAction::SetProfile { name } => {
+                            commands::instructions::ProfileEdit::SetProfile(name)
+                        }
+                        ProfileAction::SetTargets { paths } => {
+                            commands::instructions::ProfileEdit::SetTargets(paths)
+                        }
+                        ProfileAction::AddExclude { fragment } => {
+                            commands::instructions::ProfileEdit::AddExclude(fragment)
+                        }
+                        ProfileAction::RmExclude { fragment } => {
+                            commands::instructions::ProfileEdit::RmExclude(fragment)
+                        }
+                        ProfileAction::AutoApply { enable } => {
+                            commands::instructions::ProfileEdit::AutoApply(enable)
+                        }
+                    };
+                    commands::instructions::Action::Profile(p)
+                }
             };
             commands::instructions::run(saga_path, act)
         }
