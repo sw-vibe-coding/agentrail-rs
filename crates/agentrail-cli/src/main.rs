@@ -382,6 +382,10 @@ enum InstructionsAction {
     /// CI gating.
     Status,
     /// Render the embedded briefing into the target files (idempotent)
+    ///
+    /// There is no `--dry-run` — re-applying the same content is a no-op
+    /// by design. Use `agentrail instructions diff` first to preview the
+    /// changes; that is the dry-run equivalent.
     Apply,
     /// Show line-level differences between embedded and current blocks
     ///
@@ -445,8 +449,12 @@ enum ProfileAction {
     /// When on, `agentrail next` rewrites a stale briefing block in place
     /// and tells the agent to re-read CLAUDE.md before proceeding. When
     /// off (default), `next` only prints a warning.
+    ///
+    /// The argument is required — pass `true` or `false`. Running with
+    /// no argument is a clap usage error, not a toggle. To inspect the
+    /// current value, run `agentrail instructions profile show`.
     AutoApply {
-        /// `true` or `false`
+        /// `true` or `false` (required)
         enable: bool,
     },
 }

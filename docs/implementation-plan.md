@@ -262,6 +262,34 @@ the prose. A possible weak heuristic: lint for known anti-patterns
 **Effort:** medium-large. Heuristic-based at first, with false-positive
 risk.
 
+### `instructions profile init` scaffolder
+
+**Idea:** `agentrail instructions profile init [--commented]` writes a
+fully-commented `.agentrail/instruction-profile.toml` template showing
+all four fields (profile, targets, auto_apply, exclude) with example
+values commented out. Newcomers see the entire surface in one place
+instead of discovering it through `--help`.
+
+**Status:** not done. Today's `add-exclude` / `set-targets` / etc.
+will create the file lazily on first write, but the file only contains
+the fields the user has touched. A scaffolder would be friendlier as a
+discovery aid.
+
+**Effort:** small. ~30 lines: a constant template string + a new
+`ProfileEdit::Init { force: bool }` variant + a clap subcommand. Refuse
+to overwrite without `--force`.
+
+### Narrow-terminal schema rendering
+
+**Idea:** the inline schema in `agentrail instructions --help` puts
+field comments on the same line as values. On terminals narrower than
+~80 cols those wrap awkwardly.
+
+**Status:** deferred. Splitting `value` and `# comment` onto separate
+lines fixes narrow terminals but worsens readability at standard
+widths (doubles the vertical space). Only revisit if multiple users
+hit narrow-terminal mush.
+
 ### Saga-aware `instructions show` (DONE)
 
 **Idea:** make `agentrail instructions show` print the body that `apply`
