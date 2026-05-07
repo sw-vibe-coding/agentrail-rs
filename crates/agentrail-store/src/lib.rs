@@ -8,4 +8,5 @@ pub mod session;
 pub mod skill;
 pub mod snapshot;
 pub mod step;
+pub mod tracking;
 pub mod trajectory;

@@ -1,6 +1,6 @@
 use agentrail_core::error::Result;
 use agentrail_core::{SagaStatus, StepRole, StepStatus, Trajectory};
-use agentrail_store::{git_history, saga, session, step, trajectory};
+use agentrail_store::{git_history, saga, session, step, tracking, trajectory};
 use std::path::Path;
 
 pub struct CompleteArgs<'a> {
@@ -176,6 +176,15 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
     println!("STOP. Do not make further changes in this session.");
     println!("Any work after this point will be untracked.");
     println!("Start a new session and run `agentrail next` for the next step.");
+
+    // `complete` just wrote step.toml + summary.md (and possibly a fresh
+    // next-step dir). Always surface the uncommitted-state reminder so
+    // the agent stages and commits the saga record before walking away —
+    // forgetting this is the #1 saga-data-loss footgun.
+    if let Some(reminder) = tracking::complete_reminder(saga_path) {
+        println!();
+        println!("{reminder}");
+    }
 
     Ok(())
 }

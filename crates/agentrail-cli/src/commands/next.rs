@@ -1,6 +1,6 @@
 use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaStatus, StepStatus};
-use agentrail_store::{domain, instructions, saga, skill, step, trajectory};
+use agentrail_store::{domain, instructions, saga, skill, step, tracking, trajectory};
 use std::path::Path;
 
 pub struct NextArgs {
@@ -35,6 +35,14 @@ pub fn run(saga_path: &Path, args: &NextArgs) -> Result<u8> {
     if briefing_stale && args.strict {
         eprintln!("Refusing to proceed: --strict set and briefing is stale.");
         return Ok(3);
+    }
+
+    // Tracking check: warn loudly if `.agentrail/` is untracked, modified,
+    // or (worst case) gitignored. Saga state that's not committed is the
+    // most common data-loss footgun — surface it before any work starts.
+    if let Some(msg) = tracking::warning(saga_path) {
+        eprintln!("{msg}");
+        eprintln!();
     }
 
     if !saga::saga_exists(saga_path) {
