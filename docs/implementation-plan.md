@@ -201,13 +201,24 @@ addresses a specific friction point users have already raised.
 `no-push` (default minus `global/push-discipline.md`), `minimal` (just
 `baseline.md` + `session-protocol.md`).
 
-**Status:** not done. `exclude` in `instruction-profile.toml` covers the
-same use case per-repo without imposing maintenance burden on
-agent-instructions/. Add a named profile only if the same exclude pattern
-turns up in 3+ repos.
+**Status:** not done, and the use cases that motivated this turned out
+to be covered by simpler mechanisms:
 
-**Effort:** small. Add a TOML file under `agent-instructions/profiles/`
-and a `(name, content)` entry in `EMBEDDED_PROFILES`.
+- *Per-user push privilege* (some users on a project can push, others
+  can't): solved by `exclude = ["global/push-discipline.md"]` in
+  `instruction-profile.toml` plus site-specific handoff content as
+  local sections of CLAUDE.md outside the briefing markers. No new
+  profile needed; agentrail-rs stays opinion-free about your specific
+  release-engineering flow.
+- *Wanting a leaner briefing*: `exclude` covers it per-repo.
+
+Add a named profile only if the same exclude pattern turns up
+unmodified in 3+ repos AND the additional content is also generic
+(not site-specific). Hasn't happened yet.
+
+**Effort:** small if/when justified. Add a TOML file under
+`agent-instructions/profiles/` and a `(name, content)` entry in
+`EMBEDDED_PROFILES`.
 
 ### Per-target rendering shapes
 

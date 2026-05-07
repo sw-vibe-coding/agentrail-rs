@@ -129,6 +129,24 @@ intentionally drops a rule stays "up to date" without churning. Unknown
 exclude entries (e.g. a fragment renamed upstream) are silently ignored
 so per-repo configs survive maintainer-side renames.
 
+**Sandboxed / non-pushing setups.** The default briefing assumes the
+agent can `git push`. If your setup has unprivileged users that cannot
+push (locked-down workstations, mirrored clones with no SSH keys, etc.),
+two mechanisms cover it without bundling site-specific guidance into
+agentrail-rs:
+
+1. `agentrail instructions profile add-exclude global/push-discipline.md`
+   on the affected repos — drops the push-prescriptive content from the
+   briefing block.
+2. Document your project-specific handoff convention (branch rename,
+   queue files, release-engineer scan, etc.) as local content in
+   CLAUDE.md / AGENTS.md *outside* the briefing markers. The briefing
+   apply preserves that content verbatim, so it survives every refresh.
+
+This keeps agentrail-rs's bundled fragments general (every clone of
+this repo gets sane defaults) while allowing arbitrary site-specific
+flows to layer on top via local content + exclusion.
+
 ## Key Documentation
 
 - `docs/architecture.md` -- Two-layer design, layer interaction, domain discovery
