@@ -362,6 +362,12 @@ enum Commands {
     /// The lock-file content_hash, the freshness check, and the diff command
     /// all reflect the post-exclude render, so a repo that intentionally
     /// drops a fragment stays "up to date" without churn.
+    ///
+    /// `instruction-profile.toml` is user config (like `.gitconfig`).
+    /// Hand-edit it freely, or use `agentrail instructions profile *` to
+    /// mutate via commands — both are valid. The agentrail-managed files
+    /// in `.agentrail/` are `saga.toml` / `step.toml` / session JSONLs /
+    /// trajectory JSONs (don't hand-edit those).
     Instructions {
         #[command(subcommand)]
         action: InstructionsAction,

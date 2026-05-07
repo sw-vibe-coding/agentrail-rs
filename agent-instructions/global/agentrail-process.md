@@ -19,5 +19,20 @@ the source, and forget the `.agentrail/` files. The result is a saga whose
 recorded history disagrees with git history, which `agentrail audit` will
 flag — but only after the damage is done.
 
-Never edit or delete files under `.agentrail/` by hand. Always go through
-`agentrail` commands. A direct `rm` on untracked step files is unrecoverable.
+### What's hand-editable in `.agentrail/`
+
+Three categories of files live here, and the rules differ:
+
+- **Append-only saga state** — `saga.toml`, `step.toml`, `plan.md`, session
+  JSONLs under `sessions/`, trajectory JSONs under `trajectories/`, and
+  anything under `.agentrail-archive/`. **Never hand-edit or delete these.**
+  They are written by agentrail commands and represent the durable saga
+  record; hand-editing desyncs the saga from git history and from prior
+  session memory. A direct `rm` on untracked files is unrecoverable.
+- **Regenerated state** — `instruction-lock.toml`. Don't hand-edit; it is
+  rewritten on every `agentrail instructions apply`, so any local changes
+  are overwritten silently.
+- **User config** — `instruction-profile.toml`. This is normal user-edited
+  config, like `.gitconfig` or a `package.json`. Hand-edit it freely, or
+  use `agentrail instructions profile *` subcommands to mutate via
+  commands (which validate field values and surface typos).
