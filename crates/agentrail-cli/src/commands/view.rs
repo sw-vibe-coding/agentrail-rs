@@ -68,9 +68,7 @@ fn open_in_browser(path: &Path) -> std::io::Result<()> {
     };
     let status = Command::new(cmd).arg(path).status()?;
     if !status.success() {
-        return Err(std::io::Error::other(format!(
-            "{cmd} exited with {status}"
-        )));
+        return Err(std::io::Error::other(format!("{cmd} exited with {status}")));
     }
     Ok(())
 }
@@ -222,10 +220,7 @@ fn load_archives(saga_path: &Path) -> Result<Vec<ArchiveSagaModel>> {
     Ok(out)
 }
 
-fn build_step_models(
-    saga_dir: &Path,
-    raw: Vec<(PathBuf, StepConfig)>,
-) -> Result<Vec<StepModel>> {
+fn build_step_models(saga_dir: &Path, raw: Vec<(PathBuf, StepConfig)>) -> Result<Vec<StepModel>> {
     // Pre-load trajectories per task_type once so each step doesn't re-read.
     let mut tj_cache: HashMap<String, Vec<Trajectory>> = HashMap::new();
     let traj_root = saga_dir.join("trajectories");
@@ -418,7 +413,10 @@ fn render_header(m: &ViewModel, title: &str) -> String {
 
 fn render_status_tab(m: &ViewModel) -> String {
     match &m.current {
-        None => "<p class=\"empty\">No active saga. Run <code>agentrail init</code> to start one.</p>".to_string(),
+        None => {
+            "<p class=\"empty\">No active saga. Run <code>agentrail init</code> to start one.</p>"
+                .to_string()
+        }
         Some(c) => {
             let header = format!(
                 "<div class=\"saga-card\">\n\
@@ -428,11 +426,18 @@ fn render_status_tab(m: &ViewModel) -> String {
                    <details><summary>Plan</summary><pre class=\"plan\">{plan}</pre></details>\n\
                  </div>\n",
                 name = esc(&c.config.name),
-                sclass = match c.config.status { SagaStatus::Active => "active", SagaStatus::Completed => "completed" },
+                sclass = match c.config.status {
+                    SagaStatus::Active => "active",
+                    SagaStatus::Completed => "completed",
+                },
                 status = c.config.status,
                 created = esc(&c.config.created_at),
                 cur = c.config.current_step,
-                retro = if c.config.retroactive { " · <em>retroactive</em>" } else { "" },
+                retro = if c.config.retroactive {
+                    " · <em>retroactive</em>"
+                } else {
+                    ""
+                },
                 progress = render_progress(c.pct_complete),
                 plan = esc(&c.plan),
             );
@@ -614,7 +619,11 @@ fn render_commits(commits: &[String], github_repo: Option<&str>) -> String {
         };
         items.push_str(&item);
     }
-    format!("<details><summary>Commits ({})</summary><ul class=\"commits\">{}</ul></details>", commits.len(), items)
+    format!(
+        "<details><summary>Commits ({})</summary><ul class=\"commits\">{}</ul></details>",
+        commits.len(),
+        items
+    )
 }
 
 fn render_trajectories(tjs: &[Trajectory]) -> String {
@@ -925,8 +934,7 @@ mod tests {
             no_open: true,
         };
         run(tmp.path(), &args).unwrap();
-        let html =
-            std::fs::read_to_string(tmp.path().join(".agentrail/view.html")).unwrap();
+        let html = std::fs::read_to_string(tmp.path().join(".agentrail/view.html")).unwrap();
         assert!(html.contains("demo"));
         assert!(html.contains("first"));
         assert!(html.contains("second"));

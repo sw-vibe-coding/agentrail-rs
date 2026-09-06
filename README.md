@@ -153,6 +153,17 @@ All runtime data lives in `.agentrail/` (append-only):
 
 **Step Transitions** enforce a valid lifecycle: Pending -> InProgress -> Completed|Blocked.
 
+**Parallel lanes** let two agents drive their own sagas on separate branches of the same repo. Step numbers are per-branch and will collide, so `agentrail rename prefix <lane>` retroactively namespaces the saga name and every step slug — `003-tune` becomes `003-rtx5060-tune` — and the merged tree has no colliding paths. Renaming is not renumbering: `number`, `status`, `completed_at`, and `commits` are all preserved, so it is safe to run on work that has already landed and `agentrail audit` still matches. It is idempotent, so re-run it whenever you add steps.
+
+```bash
+agentrail rename prefix rtx5060 --dry-run   # preview the plan
+agentrail rename prefix rtx5060             # saga name + every step slug
+agentrail rename step 3 rtx5060-tune        # one step
+agentrail rename saga "rtx5060 perf sweep"  # saga name only
+```
+
+Archive each lane (`agentrail archive`) before merging: slug prefixes separate the step directories, but both branches still have a single `saga.toml`. Since the rename prefixes the saga name too, the archive directories are distinct and the merge is fully conflict-free.
+
 **Briefing / clearinghouse** is a single source of truth for agent rules shared across many repos. Canonical fragments live in `agent-instructions/` and are bundled into the binary at compile time. Each project's `CLAUDE.md` / `AGENTS.md` carries a markered region that `agentrail instructions apply` regenerates idempotently — local content outside the markers is preserved. `agentrail next` and `agentrail status` warn when a repo's stamped block diverges from the embedded version, and an opt-in `auto_apply = true` in `.agentrail/instruction-profile.toml` flips the warning into an in-place rewrite.
 
 ```bash

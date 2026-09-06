@@ -12,6 +12,7 @@ pub mod insert;
 pub mod instructions;
 pub mod next;
 pub mod plan;
+pub mod rename;
 pub mod reopen;
 pub mod reorder;
 pub mod run_loop;

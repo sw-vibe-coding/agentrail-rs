@@ -1012,11 +1012,7 @@ mod tests {
     #[test]
     fn exclude_drops_named_fragment_from_render() {
         let full = render_body("default", &[]).unwrap();
-        let trimmed = render_body(
-            "default",
-            &["global/push-discipline.md".to_string()],
-        )
-        .unwrap();
+        let trimmed = render_body("default", &["global/push-discipline.md".to_string()]).unwrap();
         assert!(full.contains("Push discipline"));
         assert!(!trimmed.contains("Push discipline"));
         // Other fragments still present
@@ -1029,11 +1025,7 @@ mod tests {
     #[test]
     fn exclude_with_unknown_path_is_silently_ignored() {
         let full = render_body("default", &[]).unwrap();
-        let with_typo = render_body(
-            "default",
-            &["global/does-not-exist.md".to_string()],
-        )
-        .unwrap();
+        let with_typo = render_body("default", &["global/does-not-exist.md".to_string()]).unwrap();
         // Typo'd exclude entries don't match anything → render is unchanged.
         assert_eq!(full, with_typo);
     }
@@ -1059,13 +1051,8 @@ mod tests {
 
         // Lock hash matches the post-exclude render.
         let lock = load_lock(tmp.path()).unwrap().unwrap();
-        let expected = fnv1a_hex(
-            &render_body(
-                "default",
-                &["global/push-discipline.md".to_string()],
-            )
-            .unwrap(),
-        );
+        let expected =
+            fnv1a_hex(&render_body("default", &["global/push-discipline.md".to_string()]).unwrap());
         assert_eq!(lock.content_hash, expected);
 
         // Status reports up to date — the embedded_hash respects exclude too.

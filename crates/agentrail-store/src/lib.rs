@@ -3,6 +3,7 @@ pub mod audit;
 pub mod domain;
 pub mod git_history;
 pub mod instructions;
+pub mod rename;
 pub mod saga;
 pub mod session;
 pub mod skill;

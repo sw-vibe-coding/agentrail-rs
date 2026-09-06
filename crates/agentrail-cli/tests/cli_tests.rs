@@ -1,6 +1,6 @@
 use agentrail_cli::commands::{
-    abort, begin, complete, distill, history, init, insert, instructions, next, plan, reopen,
-    reorder, status,
+    abort, begin, complete, distill, history, init, insert, instructions, next, plan, rename,
+    reopen, reorder, status,
 };
 use agentrail_core::{FailureMode, OutputContract, Procedure, SagaStatus, Skill, Trajectory};
 use agentrail_store::{saga, skill, step, trajectory};
@@ -991,8 +991,8 @@ fn instructions_profile_add_exclude_writes_config_and_rejects_typos() {
     )
     .unwrap();
 
-    let toml = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
-        .unwrap();
+    let toml =
+        std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml")).unwrap();
     assert!(toml.contains("exclude"));
     assert!(toml.contains("push-discipline"));
 
@@ -1004,8 +1004,8 @@ fn instructions_profile_add_exclude_writes_config_and_rejects_typos() {
         )),
     )
     .unwrap();
-    let toml2 = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
-        .unwrap();
+    let toml2 =
+        std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml")).unwrap();
     assert_eq!(
         toml2.matches("push-discipline").count(),
         1,
@@ -1020,8 +1020,8 @@ fn instructions_profile_add_exclude_writes_config_and_rejects_typos() {
         )),
     )
     .unwrap();
-    let toml3 = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
-        .unwrap();
+    let toml3 =
+        std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml")).unwrap();
     assert!(!toml3.contains("push-discipline"));
 
     // add-exclude with unknown fragment errors with a helpful message.
@@ -1053,8 +1053,8 @@ fn instructions_profile_set_targets_and_auto_apply() {
     )
     .unwrap();
 
-    let toml = std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml"))
-        .unwrap();
+    let toml =
+        std::fs::read_to_string(tmp.path().join(".agentrail/instruction-profile.toml")).unwrap();
     assert!(toml.contains("targets"));
     assert!(toml.contains("AGENTS.md"));
     assert!(toml.contains("auto_apply"));
@@ -1115,4 +1115,328 @@ fn next_auto_apply_refreshes_block_in_place() {
     // A second `next` is silent (block now matches embedded).
     let code2 = next::run(tmp.path(), &next::NextArgs { strict: true }).unwrap();
     assert_eq!(code2, 0);
+}
+
+// ---------------------------------------------------------------------------
+// rename — retroactive lane namespacing for parallel-branch sagas
+// ---------------------------------------------------------------------------
+
+/// Saga with two completed steps and one in-progress, mid-flight.
+fn lane_fixture(tmp: &std::path::Path, saga_name: &str, slugs: [&str; 3]) {
+    init::run(tmp, saga_name, "plan", false).unwrap();
+    complete::run(
+        tmp,
+        &complete::CompleteArgs {
+            summary: None,
+            next_slug: Some(slugs[0]),
+            next_prompt: Some("p"),
+            next_context: vec![],
+            next_role: "production",
+            next_task_type: None,
+            planned: vec![],
+            done: false,
+            reward: None,
+            actions: None,
+            failure_mode: None,
+        },
+    )
+    .unwrap();
+    for next in [Some(slugs[1]), Some(slugs[2])] {
+        begin::run(tmp).unwrap();
+        complete::run(
+            tmp,
+            &complete::CompleteArgs {
+                summary: Some("did it"),
+                next_slug: next,
+                next_prompt: Some("p"),
+                next_context: vec![],
+                next_role: "production",
+                next_task_type: None,
+                planned: vec![],
+                done: false,
+                reward: None,
+                actions: None,
+                failure_mode: None,
+            },
+        )
+        .unwrap();
+    }
+    begin::run(tmp).unwrap();
+}
+
+#[test]
+fn rename_prefix_namespaces_saga_and_every_step() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    rename::run(
+        tmp.path(),
+        rename::Action::Prefix {
+            prefix: "rtx5060".to_string(),
+            dry_run: false,
+            skip_saga: false,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().name, "rtx5060-perf");
+    let dir = saga::saga_dir(tmp.path());
+    let steps = step::list_steps(&dir).unwrap();
+    assert_eq!(steps.len(), 3);
+    for (path, cfg) in &steps {
+        assert!(
+            cfg.slug.starts_with("rtx5060-"),
+            "slug {} not prefixed",
+            cfg.slug
+        );
+        assert_eq!(
+            path.file_name().unwrap().to_string_lossy(),
+            format!("{:03}-{}", cfg.number, cfg.slug),
+            "directory name must track the slug"
+        );
+    }
+}
+
+#[test]
+fn rename_prefix_preserves_completed_steps_history_linkage() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    let dir = saga::saga_dir(tmp.path());
+    let before: Vec<_> = step::list_steps(&dir)
+        .unwrap()
+        .into_iter()
+        .map(|(_, c)| (c.number, c.status, c.completed_at, c.commits))
+        .collect();
+
+    rename::run(
+        tmp.path(),
+        rename::Action::Prefix {
+            prefix: "rtx5060".to_string(),
+            dry_run: false,
+            skip_saga: false,
+        },
+    )
+    .unwrap();
+
+    let after: Vec<_> = step::list_steps(&dir)
+        .unwrap()
+        .into_iter()
+        .map(|(_, c)| (c.number, c.status, c.completed_at, c.commits))
+        .collect();
+    assert_eq!(
+        before, after,
+        "rename must not renumber or disturb status/commits"
+    );
+    // The cursor still resolves — numbering is untouched, so `next` works.
+    assert_eq!(
+        next::run(tmp.path(), &next::NextArgs { strict: false }).unwrap(),
+        0
+    );
+}
+
+#[test]
+fn rename_prefix_dry_run_changes_nothing() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    rename::run(
+        tmp.path(),
+        rename::Action::Prefix {
+            prefix: "rtx5060".to_string(),
+            dry_run: true,
+            skip_saga: false,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().name, "perf");
+    let dir = saga::saga_dir(tmp.path());
+    assert!(dir.join("steps/001-setup").is_dir());
+}
+
+#[test]
+fn rename_prefix_is_idempotent_and_covers_steps_added_later() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+    let args = || rename::Action::Prefix {
+        prefix: "rtx5060".to_string(),
+        dry_run: false,
+        skip_saga: false,
+    };
+
+    rename::run(tmp.path(), args()).unwrap();
+    rename::run(tmp.path(), args()).unwrap(); // second pass: no-op
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().name, "rtx5060-perf");
+
+    // A step added after the rename picks up the prefix on the next pass.
+    complete::run(
+        tmp.path(),
+        &complete::CompleteArgs {
+            summary: Some("done"),
+            next_slug: Some("profile"),
+            next_prompt: Some("p"),
+            next_context: vec![],
+            next_role: "production",
+            next_task_type: None,
+            planned: vec![],
+            done: false,
+            reward: None,
+            actions: None,
+            failure_mode: None,
+        },
+    )
+    .unwrap();
+    rename::run(tmp.path(), args()).unwrap();
+
+    let dir = saga::saga_dir(tmp.path());
+    assert!(dir.join("steps/004-rtx5060-profile").is_dir());
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().name, "rtx5060-perf");
+}
+
+#[test]
+fn rename_prefix_skip_saga_leaves_the_name_alone() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    rename::run(
+        tmp.path(),
+        rename::Action::Prefix {
+            prefix: "rtx5060".to_string(),
+            dry_run: false,
+            skip_saga: true,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(saga::load_saga(tmp.path()).unwrap().name, "perf");
+    assert!(
+        saga::saga_dir(tmp.path())
+            .join("steps/001-rtx5060-setup")
+            .is_dir()
+    );
+}
+
+#[test]
+fn rename_step_renames_one_slug() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    rename::run(
+        tmp.path(),
+        rename::Action::Step {
+            number: 2,
+            new_slug: "rtx3060-bench".to_string(),
+            dry_run: false,
+        },
+    )
+    .unwrap();
+
+    let dir = saga::saga_dir(tmp.path());
+    assert!(dir.join("steps/002-rtx3060-bench").is_dir());
+    assert!(!dir.join("steps/002-bench").exists());
+    assert!(
+        dir.join("steps/001-setup").is_dir(),
+        "other steps untouched"
+    );
+}
+
+#[test]
+fn rename_step_rejects_a_slug_that_escapes_the_steps_dir() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    for bad in ["../escape", "a/b", ".hidden"] {
+        assert!(
+            rename::run(
+                tmp.path(),
+                rename::Action::Step {
+                    number: 1,
+                    new_slug: bad.to_string(),
+                    dry_run: false,
+                },
+            )
+            .is_err(),
+            "expected {bad:?} to be rejected"
+        );
+    }
+    assert!(saga::saga_dir(tmp.path()).join("steps/001-setup").is_dir());
+}
+
+#[test]
+fn rename_saga_renames_only_the_saga() {
+    let tmp = tempdir().unwrap();
+    lane_fixture(tmp.path(), "perf", ["setup", "bench", "tune"]);
+
+    rename::run(
+        tmp.path(),
+        rename::Action::Saga {
+            name: "rtx3060 perf sweep".to_string(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        saga::load_saga(tmp.path()).unwrap().name,
+        "rtx3060 perf sweep"
+    );
+    assert!(saga::saga_dir(tmp.path()).join("steps/001-setup").is_dir());
+}
+
+#[test]
+fn rename_prefix_errors_without_a_saga() {
+    let tmp = tempdir().unwrap();
+    assert!(
+        rename::run(
+            tmp.path(),
+            rename::Action::Prefix {
+                prefix: "rtx5060".to_string(),
+                dry_run: false,
+                skip_saga: false,
+            },
+        )
+        .is_err()
+    );
+}
+
+/// The whole point: two agents prefix their own lanes, and the union of
+/// their step directories — what a git merge produces — has no path
+/// collisions even though the step numbers overlap.
+#[test]
+fn two_prefixed_lanes_produce_no_colliding_step_directories() {
+    let mut lanes = Vec::new();
+    for (prefix, name) in [("rtx5060", "perf"), ("rtx3060", "perf")] {
+        let tmp = tempdir().unwrap();
+        lane_fixture(tmp.path(), name, ["setup", "bench", "tune"]);
+        rename::run(
+            tmp.path(),
+            rename::Action::Prefix {
+                prefix: prefix.to_string(),
+                dry_run: false,
+                skip_saga: false,
+            },
+        )
+        .unwrap();
+
+        let dir = saga::saga_dir(tmp.path());
+        let names: Vec<String> = step::list_steps(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|(p, _)| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        lanes.push((saga::load_saga(tmp.path()).unwrap().name, names));
+    }
+
+    let (name_a, dirs_a) = &lanes[0];
+    let (name_b, dirs_b) = &lanes[1];
+    assert_ne!(name_a, name_b, "saga names must differ across lanes");
+    assert_eq!(dirs_a.len(), 3);
+    for a in dirs_a {
+        assert!(
+            !dirs_b.contains(a),
+            "merging both lanes would collide on {a}"
+        );
+    }
+    // Numbers still overlap — that is the documented caveat.
+    assert!(dirs_a[0].starts_with("001-") && dirs_b[0].starts_with("001-"));
 }

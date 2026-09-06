@@ -38,7 +38,7 @@ pub fn run(saga_path: &Path, task_type: &str) -> Result<()> {
         *action_counts.entry(t.action.as_str()).or_default() += 1;
     }
     let mut sorted_actions: Vec<_> = action_counts.into_iter().collect();
-    sorted_actions.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_actions.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     // Build procedure from most common successful actions
     let procedure_steps: Vec<String> = sorted_actions

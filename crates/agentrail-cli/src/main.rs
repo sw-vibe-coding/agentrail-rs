@@ -349,6 +349,31 @@ enum Commands {
         #[arg(long)]
         no_open: bool,
     },
+    /// Rename saga / step slugs — retroactive lane namespacing
+    ///
+    /// Two agents working the same repo on parallel branches each write
+    /// into `.agentrail/steps/`. The `NNN-` number is per-branch and will
+    /// repeat, so the *slug* is what keeps the lanes apart: give each
+    /// agent a prefix (`rtx5060`, `rtx3060`) and every step directory
+    /// becomes unique across branches, so a merge lands both lanes side
+    /// by side instead of conflicting on the same path.
+    ///
+    /// Renaming is NOT renumbering. `number`, `status`, `completed_at`,
+    /// and `commits` are all preserved, so a completed step's
+    /// git-history linkage survives and `agentrail audit` still matches
+    /// it. That is why — unlike `insert` and `reorder` — rename is happy
+    /// to touch completed steps: already-landed work is exactly the
+    /// history a retroactive rename exists to fix.
+    ///
+    /// CAVEAT: after a merge both lanes' steps coexist with overlapping
+    /// numbers (a `003-rtx5060-*` and a `003-rtx3060-*`), which
+    /// `status` / `next` will read as ambiguous. Archive each lane's saga
+    /// (`agentrail archive`) before or at merge time, or keep the merge
+    /// to one active lane.
+    Rename {
+        #[command(subcommand)]
+        action: RenameAction,
+    },
     /// Manage shared agent briefing — the global instructions clearinghouse
     ///
     /// Renders embedded `agent-instructions/` fragments into a markered
@@ -393,6 +418,41 @@ enum Commands {
     Instructions {
         #[command(subcommand)]
         action: InstructionsAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum RenameAction {
+    /// Apply a lane prefix to the saga name and every step slug (idempotent)
+    ///
+    /// `agentrail rename prefix rtx5060` turns `003-tune-kernel` into
+    /// `003-rtx5060-tune-kernel` and the saga `perf` into `rtx5060-perf`.
+    /// Steps that already carry the prefix are skipped, so re-running
+    /// after adding new steps only touches the new ones.
+    Prefix {
+        /// Lane prefix, e.g. `rtx5060`. A trailing `-` is optional.
+        prefix: String,
+        /// Print the plan without touching anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Rename step slugs only; leave the saga name alone
+        #[arg(long)]
+        skip_saga: bool,
+    },
+    /// Rename one step's slug
+    Step {
+        /// Step number
+        number: u32,
+        /// New slug (ASCII letters, digits, `-`, `_`, `.`)
+        new_slug: String,
+        /// Print the plan without touching anything
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Rename the saga itself, leaving step slugs alone
+    Saga {
+        /// New saga name
+        name: String,
     },
 }
 
@@ -603,6 +663,30 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
                 no_open,
             };
             commands::view::run(saga_path, &args).map(|_| 0)
+        }
+        Commands::Rename { action } => {
+            let act = match action {
+                RenameAction::Prefix {
+                    prefix,
+                    dry_run,
+                    skip_saga,
+                } => commands::rename::Action::Prefix {
+                    prefix,
+                    dry_run,
+                    skip_saga,
+                },
+                RenameAction::Step {
+                    number,
+                    new_slug,
+                    dry_run,
+                } => commands::rename::Action::Step {
+                    number,
+                    new_slug,
+                    dry_run,
+                },
+                RenameAction::Saga { name } => commands::rename::Action::Saga { name },
+            };
+            commands::rename::run(saga_path, act).map(|_| 0)
         }
         Commands::Instructions { action } => {
             let act = match action {

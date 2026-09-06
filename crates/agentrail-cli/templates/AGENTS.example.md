@@ -197,6 +197,49 @@ work normally — use snapshot only as belt-and-suspenders insurance.
 
 ---
 
+## Working a branch in parallel with another agent
+
+If another agent is working the same repo on its own branch at the same
+time, you are both writing into `.agentrail/`. Step numbers are
+per-branch and *will* collide (you both have a `003-`), so the **slug**
+is what keeps the two lanes apart.
+
+Pick a lane prefix for your branch — something that names your slice of
+the work (`rtx5060`, `rtx3060`, `api`, `ui`) — and namespace your saga
+with it:
+
+```bash
+agentrail rename prefix <lane> --dry-run   # preview
+agentrail rename prefix <lane>             # apply
+git add -A .agentrail/                     # -A: a dir move is a delete + an add
+git commit -m "saga: rename into <lane> lane"
+```
+
+`001-setup` becomes `001-<lane>-setup`, and the saga name gets the
+prefix too. Your directories no longer collide with the other agent's,
+so both lanes survive the merge.
+
+Notes:
+
+- **It is safe to run retroactively.** Rename is not renumber — step
+  numbers, statuses, completion timestamps, and recorded commits are all
+  preserved, so already-completed steps keep their git-history linkage
+  and `agentrail audit` still matches them.
+- **It is idempotent.** Steps already carrying the prefix are skipped, so
+  just re-run it whenever you have added steps.
+- **Archive your lane before the merge.** Slug prefixing separates step
+  directories, but both branches still have one `saga.toml` and
+  overlapping step numbers. Run `agentrail archive --reason "<lane>
+  merged"` when your lane is done — because the saga *name* is prefixed
+  too, the archive directories are distinct and the merge is completely
+  conflict-free, with both lanes' histories landing side by side.
+
+Single-step and saga-only forms exist if you need finer control:
+`agentrail rename step <N> <new-slug>` and
+`agentrail rename saga <new-name>`.
+
+---
+
 ## Quick reference
 
 | Command | When to use |
@@ -210,6 +253,7 @@ work normally — use snapshot only as belt-and-suspenders insurance.
 | `agentrail add --slug ... --prompt ...` | Add a step without completing current one (maintenance mode) |
 | `agentrail abort --reason "..."` | Mark current step as blocked |
 | `agentrail archive --reason "..."` | Close out a saga and start fresh |
+| `agentrail rename prefix <lane>` | Namespace this branch's saga so it won't collide with another agent's parallel saga |
 | `agentrail audit` | Diagnose saga-vs-git gaps |
 | `agentrail snapshot` | Save a safety-net copy of `.agentrail/` into the git object store (opt-in) |
 | `agentrail snapshot --list` | List existing snapshot refs |

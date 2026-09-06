@@ -73,7 +73,10 @@ pub fn run(saga_path: &Path, name: &str, plan_raw: &str, domain: Option<&str>) -
     // 3. Stamp the canonical briefing into both targets.
     match instructions::apply(saga_path) {
         Ok((profile, outcomes)) => {
-            println!("Applied briefing profile '{profile}' to {} target(s).", outcomes.len());
+            println!(
+                "Applied briefing profile '{profile}' to {} target(s).",
+                outcomes.len()
+            );
         }
         Err(e) => {
             eprintln!("Warning: could not apply briefing: {e}");

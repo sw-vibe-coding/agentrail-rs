@@ -248,11 +248,7 @@ mod tests {
         init_git(tmp.path());
         std::fs::create_dir_all(tmp.path().join(".agentrail/steps/001-foo")).unwrap();
         std::fs::write(tmp.path().join(".agentrail/saga.toml"), "name = \"x\"\n").unwrap();
-        std::fs::write(
-            tmp.path().join(".agentrail/steps/001-foo/step.toml"),
-            "x",
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join(".agentrail/steps/001-foo/step.toml"), "x").unwrap();
 
         let report = check(tmp.path()).unwrap();
         assert!(!report.is_clean());
