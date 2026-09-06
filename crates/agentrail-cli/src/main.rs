@@ -349,7 +349,7 @@ enum Commands {
         #[arg(long)]
         no_open: bool,
     },
-    /// Rename saga / step slugs — retroactive lane namespacing
+    /// Rename saga / step slugs so two agents' parallel branches don't collide (retroactive)
     ///
     /// Two agents working the same repo on parallel branches each write
     /// into `.agentrail/steps/`. The `NNN-` number is per-branch and will
@@ -370,6 +370,22 @@ enum Commands {
     /// `status` / `next` will read as ambiguous. Archive each lane's saga
     /// (`agentrail archive`) before or at merge time, or keep the merge
     /// to one active lane.
+    #[command(after_long_help = "\
+EXAMPLES (safe to run after work has already started):
+  agentrail rename prefix rtx5060 --dry-run  # preview, change nothing
+  agentrail rename prefix rtx5060            # saga name + every step slug
+  git add -A .agentrail/                     # -A: a dir move is a delete + an add
+  agentrail rename step 3 rtx5060-tune       # just one step
+  agentrail rename saga \"rtx5060 sweep\"      # just the saga name
+
+`001-setup` becomes `001-rtx5060-setup`. Numbers, statuses and recorded
+commits are preserved, so completed steps keep their git-history linkage —
+this is meant to be run retroactively, mid-saga. Re-run it any time:
+already-prefixed steps are skipped.
+
+Archive your lane (`agentrail archive`) before merging. Slug prefixes
+de-conflict the step directories, but both branches still have one
+saga.toml; archiving makes the merge fully conflict-free.")]
     Rename {
         #[command(subcommand)]
         action: RenameAction,
@@ -429,6 +445,15 @@ enum RenameAction {
     /// `003-rtx5060-tune-kernel` and the saga `perf` into `rtx5060-perf`.
     /// Steps that already carry the prefix are skipped, so re-running
     /// after adding new steps only touches the new ones.
+    #[command(after_long_help = "\
+EXAMPLE (safe to run after work has already started):
+  agentrail rename prefix rtx5060 --dry-run  # preview, change nothing
+  agentrail rename prefix rtx5060            # apply
+  git add -A .agentrail/ && git commit -m \"saga: rename into rtx5060 lane\"
+
+Numbers, statuses and recorded commits are preserved, so this is safe on
+steps that are already completed. Idempotent — re-run it whenever you have
+added steps. Archive the lane before merging.")]
     Prefix {
         /// Lane prefix, e.g. `rtx5060`. A trailing `-` is optional.
         prefix: String,
