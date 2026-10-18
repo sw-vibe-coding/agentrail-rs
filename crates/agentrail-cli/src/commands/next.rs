@@ -83,13 +83,25 @@ pub fn run(saga_path: &Path, args: &NextArgs) -> Result<u8> {
             } else {
                 ""
             };
+            let marker = if s.reserved_for.is_some() && s.status != StepStatus::Completed {
+                "r"
+            } else {
+                marker
+            };
+            let owner = s
+                .reserved_for
+                .as_deref()
+                .map(|o| format!(" (reserved for {o})"))
+                .unwrap_or_default();
             println!(
-                "  [{}] {:03}-{} [{}]: {}{}",
-                marker, s.number, s.slug, s.role, s.description, here
+                "  [{}] {:03}-{} [{}]: {}{}{}",
+                marker, s.number, s.slug, s.role, s.description, owner, here
             );
         }
         println!();
     }
+
+    crate::commands::status::print_stranded(&saga_dir, config.current_step)?;
 
     // Print current step details
     if config.current_step > 0 {
@@ -101,6 +113,12 @@ pub fn run(saga_path: &Path, args: &NextArgs) -> Result<u8> {
                     step_config.number, step_config.slug, step_config.role
                 );
                 println!("Status: {}", step_config.status);
+                if let Some(ref owner) = step_config.reserved_for {
+                    println!(
+                        "Reserved for {owner}: not this saga's to do here. \
+                         `agentrail close` it when they report it done, or `agentrail unreserve` it."
+                    );
+                }
                 println!("Description: {}", step_config.description);
 
                 if let Some(ref task_type) = step_config.task_type {

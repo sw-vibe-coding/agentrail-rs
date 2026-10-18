@@ -308,6 +308,10 @@ interface.
 | `agentrail insert --after <N> --slug <s> --prompt <p>` | Insert a new step at position N+1 |
 | `agentrail reorder <N> --to <M>` | Move a pending/in-progress step to position M |
 | `agentrail reopen <N>` | Reopen a completed or blocked step |
+| `agentrail close <N> --summary <s> (--commit <ref> \| --elsewhere <where>)` | Close a step done elsewhere, out of order |
+| `agentrail edit <N> --prompt <p>` | Correct the prompt of a step not yet done |
+| `agentrail reserve <N> --for <owner>` | Reserve a step for another lane, branch or repository |
+| `agentrail unreserve <N>` | Take a reserved step back |
 | `agentrail --version` | Show version and build info |
 
 ### Complete flags
@@ -389,6 +393,62 @@ agentrail complete --summary "Followup fix for reported regression"
 ```
 
 If the saga was already `Completed`, reopen flips it back to `Active`.
+
+## Correcting the Record
+
+The saga records what was done; sometimes the work happens somewhere
+the cursor never goes. A step is finished in another lane's saga, in a
+sibling repository, or by another agent, and its record here stays
+`pending`. Once the cursor has passed it, nothing brings the cursor back:
+`reorder` refuses to move it across completed steps, and `reopen` on a
+neighbor plus `complete` rewrites that neighbor's `completed_at` and
+credits HEAD with work it did not do. Three commands correct the record
+instead, and one rule keeps it from going wrong.
+
+### `agentrail close <N> --summary <s> --commit <ref> | --elsewhere <where>`
+
+Mark a pending, in-progress or blocked step completed out of order.
+Say where the work is: `--commit` (repeatable) for commits in this
+repository, resolved to full SHAs as `add --commit` does, and/or
+`--elsewhere` for anything else (`X_eTaL-libraries@0f82f93`,
+`lane readable, PR #131`), stored as `done_elsewhere` in step.toml.
+Neither given is an error. HEAD is never recorded on its own and no
+other step is touched; if the closed step is the current one, the cursor
+moves to the next open step.
+
+```bash
+# Steps 101-104 were done in the libraries repository.
+agentrail close 101 --summary "Done in X_eTaL-libraries" \
+  --elsewhere "X_eTaL-libraries@0f82f93"
+```
+
+### `agentrail edit <N> --prompt <p>`
+
+Replace the prompt (and the description `status` shows) of a step that
+is not completed: the plan changed after the step was written. A
+completed step's prompt is history and is refused.
+
+### `agentrail reserve <N> --for <owner>` and `agentrail unreserve <N>`
+
+Hand a step to someone else before they start, so it is never
+stranded: the cursor skips a reserved step, `complete` never lands on
+it, and `status` shows it as `[r]` with its owner. When the owner
+reports it done, `close` it (closing ends the reservation).
+
+```bash
+agentrail reserve 111 --for "cloud agent, PR to follow"
+# ... later, after merging their PR:
+agentrail close 111 --summary "Code strings" --commit <merge-sha>
+```
+
+### The cursor never lands on finished work
+
+`complete` advances to the next *open* step (not completed, not
+reserved), skipping any finished or reserved ones in between, instead
+of blindly to N+1; with no open step left it creates the next step
+after the highest number. And `status` and `next` list **stranded**
+steps (pending, unreserved, behind the cursor) with the three ways to
+resolve each.
 
 ## Tips
 

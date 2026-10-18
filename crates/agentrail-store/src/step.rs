@@ -81,6 +81,8 @@ pub fn create_step(p: &CreateStepParams<'_>) -> Result<PathBuf> {
         packet_file: None,
         task_type: task_type.map(|s| s.to_string()),
         commits: Vec::new(),
+        reserved_for: None,
+        done_elsewhere: None,
     };
 
     save_step(&dir, &config)?;
@@ -308,4 +310,34 @@ pub fn move_step(saga_dir: &Path, from: u32, to: u32) -> Result<()> {
     save_step(&final_source, &cfg)?;
 
     Ok(())
+}
+
+/// Whether the cursor may stop at this step: not completed and not
+/// reserved for someone else.
+pub fn is_open(config: &StepConfig) -> bool {
+    config.status != StepStatus::Completed && config.reserved_for.is_none()
+}
+
+/// The first open step numbered above `after`, if any.
+pub fn next_open_after(saga_dir: &Path, after: u32) -> Result<Option<u32>> {
+    let steps = list_steps(saga_dir)?;
+    Ok(steps
+        .iter()
+        .map(|(_, s)| s)
+        .find(|s| s.number > after && is_open(s))
+        .map(|s| s.number))
+}
+
+/// Pending, unreserved steps behind the cursor: the cursor has passed
+/// them and nothing will bring it back (`agentrail close` or `reserve`
+/// them, or `reorder` one forward).
+pub fn stranded(saga_dir: &Path, current: u32) -> Result<Vec<StepConfig>> {
+    let steps = list_steps(saga_dir)?;
+    Ok(steps
+        .into_iter()
+        .map(|(_, s)| s)
+        .filter(|s| {
+            s.number < current && s.status == StepStatus::Pending && s.reserved_for.is_none()
+        })
+        .collect())
 }

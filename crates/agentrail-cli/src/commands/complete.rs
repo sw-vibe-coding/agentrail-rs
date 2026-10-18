@@ -114,11 +114,31 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         return Ok(());
     }
 
-    // Advance to next step: use existing planned step if present, else create new
-    let next_number = config.current_step + 1;
+    // Advance to the next open step (not completed, not reserved for
+    // someone else): a completed or reserved step is never landed on, so
+    // the cursor cannot stop on finished work. Else create a new step.
+    let next_number = match step::next_open_after(&saga_dir, config.current_step)? {
+        Some(open) => open,
+        None => {
+            step::list_steps(&saga_dir)?
+                .iter()
+                .map(|(_, s)| s.number)
+                .max()
+                .unwrap_or(0)
+                .max(config.current_step)
+                + 1
+        }
+    };
     if let Ok(existing_dir) = step::find_step_dir(&saga_dir, next_number) {
         // A planned step already exists at this number -- advance to it
         let existing = step::load_step(&existing_dir)?;
+        if next_number > config.current_step + 1 {
+            println!(
+                "Skipped steps {:03} to {:03} (completed or reserved).",
+                config.current_step + 1,
+                next_number - 1
+            );
+        }
         config.current_step = next_number;
         saga::save_saga(saga_path, &config)?;
         println!(

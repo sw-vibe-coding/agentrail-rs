@@ -855,6 +855,8 @@ mod tests {
                 packet_file: None,
                 task_type: None,
                 commits: vec![],
+                reserved_for: None,
+                done_elsewhere: None,
             },
             prompt: None,
             summary: None,

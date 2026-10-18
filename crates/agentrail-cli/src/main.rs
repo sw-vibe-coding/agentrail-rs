@@ -232,6 +232,58 @@ enum Commands {
         #[arg(long)]
         to: u32,
     },
+    /// Close a step out of order: it was done elsewhere
+    ///
+    /// Marks a pending, in-progress or blocked step completed without
+    /// moving the cursor through it: a step finished in another lane,
+    /// branch or repository, or before the saga noticed. Say where the
+    /// work is: `--commit REF` (repeatable; commits in this repository,
+    /// resolved like `add --commit`) and/or `--elsewhere WHERE` (free text,
+    /// e.g. `X_eTaL-libraries@0f82f93`). HEAD is never recorded on its own,
+    /// and no other step is touched. If it is the current step, the cursor
+    /// moves to the next open step.
+    Close {
+        /// Step number to close
+        number: u32,
+        /// Summary: text, file path, or "-" for stdin
+        #[arg(long)]
+        summary: String,
+        /// Git commit reference(s) in this repository that did the work
+        #[arg(long = "commit")]
+        commits: Vec<String>,
+        /// Where the work was done, when not in this repository
+        #[arg(long)]
+        elsewhere: Option<String>,
+    },
+    /// Correct a step that is not done yet: replace its prompt
+    ///
+    /// Rewrites prompt.md and the description `status` shows. A completed
+    /// step's prompt is history and is refused (reopen it first).
+    Edit {
+        /// Step number to edit
+        number: u32,
+        /// New prompt: text, file path, or "-" for stdin
+        #[arg(long)]
+        prompt: String,
+    },
+    /// Reserve a step for someone else (another lane, branch or repository)
+    ///
+    /// The cursor skips a reserved step and `complete` never lands on it,
+    /// so it is not stranded behind the cursor while its owner works on
+    /// it. `status` shows it as [r] with its owner. When the owner reports
+    /// it done, `agentrail close` it; `agentrail unreserve` takes it back.
+    Reserve {
+        /// Step number to reserve
+        number: u32,
+        /// Who owns it (a lane, branch or repository)
+        #[arg(long = "for")]
+        owner: String,
+    },
+    /// Take back a reserved step
+    Unreserve {
+        /// Step number to unreserve
+        number: u32,
+    },
     /// Reopen a completed or blocked step
     ///
     /// Transitions the step back to InProgress, clears `completed_at`, and
@@ -658,6 +710,30 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
         .map(|_| 0),
         Commands::Reorder { from, to } => commands::reorder::run(saga_path, from, to).map(|_| 0),
         Commands::Reopen { number } => commands::reopen::run(saga_path, number).map(|_| 0),
+        Commands::Close {
+            number,
+            summary,
+            commits,
+            elsewhere,
+        } => commands::close::run(
+            saga_path,
+            &commands::close::CloseArgs {
+                number,
+                summary: &summary,
+                commits: &commits,
+                elsewhere: elsewhere.as_deref(),
+            },
+        )
+        .map(|_| 0),
+        Commands::Edit { number, prompt } => {
+            commands::edit::run(saga_path, number, &prompt).map(|_| 0)
+        }
+        Commands::Reserve { number, owner } => {
+            commands::reserve::reserve(saga_path, number, &owner).map(|_| 0)
+        }
+        Commands::Unreserve { number } => {
+            commands::reserve::unreserve(saga_path, number).map(|_| 0)
+        }
         Commands::Archive { reason } => {
             commands::archive::run(saga_path, reason.as_deref()).map(|_| 0)
         }
