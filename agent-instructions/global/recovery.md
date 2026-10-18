@@ -4,6 +4,25 @@ The saga is a record of git history. When the two diverge — agent forgets
 to commit `.agentrail/`, a step is reverted, files are renamed by hand —
 agentrail provides two recovery tools.
 
+### Work done where the cursor never goes
+
+A step finished in another lane, branch or repository stays `pending`
+here, and once the cursor has passed it nothing brings the cursor back
+(`agentrail status` lists such steps as **stranded**). Correct the record
+with commands, never by hand-editing step.toml or by `reopen`-ing a
+neighbor (that rewrites the neighbor's history):
+
+```bash
+agentrail close N --summary "..." --commit REF        # done in this repo
+agentrail close N --summary "..." --elsewhere WHERE   # done elsewhere
+agentrail edit N --prompt "..."          # a step not yet done, plan changed
+agentrail reserve N --for OWNER          # someone else's: the cursor skips it
+agentrail unreserve N                    # take it back
+```
+
+Reserve a step when you hand it off, before work starts, so it is never
+stranded; `close` it when the owner reports it done.
+
 ### `agentrail audit`
 
 Compares first-parent git history against saga steps and reports gaps.

@@ -60,6 +60,17 @@ Dependency flow: `cli -> store, exec, validate -> core`
   at or ahead of the current cursor, focus follows it so `agentrail next`
   surfaces the blocker before the preempted step. Steps placed behind
   the cursor are queued without disturbing focus.
+- **Correcting the record (`close`, `edit`, `reserve`)**: work done
+  where the cursor never goes (another lane, another repository) is
+  recorded with `agentrail close N --summary ... --commit REF |
+  --elsewhere WHERE`, which completes one step out of order without
+  touching any other or recording HEAD; `agentrail edit N --prompt`
+  corrects a step not yet done; `agentrail reserve N --for OWNER`
+  hands a step to someone else so the cursor skips it. `complete`
+  advances to the next open step (never onto a completed or reserved
+  one), and `status`/`next` list stranded steps (pending behind the
+  cursor). New step.toml fields `reserved_for` and `done_elsewhere`
+  are optional and omitted when unset, so older files load unchanged.
 - **Parallel lanes (`agentrail rename`)**: two agents on two branches in
   the same repo each write into `.agentrail/steps/`. The `NNN-` number is
   per-branch and *will* repeat, so the slug is what keeps the lanes

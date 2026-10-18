@@ -66,6 +66,15 @@ pub struct StepConfig {
     /// Used by `agentrail audit` to detect gaps between saga and git history.
     #[serde(default)]
     pub commits: Vec<String>,
+    /// Who owns this step when it is not this saga's to do: another
+    /// lane, branch or repository (set by `agentrail reserve`). The
+    /// cursor skips a reserved step, so it is never stranded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reserved_for: Option<String>,
+    /// Where a step closed out of order was actually done, when that is
+    /// not a commit in this repository (`agentrail close --elsewhere`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_elsewhere: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
