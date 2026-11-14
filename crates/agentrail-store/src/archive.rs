@@ -134,7 +134,6 @@ mod tests {
         assert!(archive_dir.join("saga.toml").is_file());
         assert!(archive_dir.join("plan.md").is_file());
         assert!(archive_dir.join("steps").is_dir());
-        assert!(archive_dir.join("sessions").is_dir());
         assert!(archive_dir.join("trajectories").is_dir());
 
         // Config should match

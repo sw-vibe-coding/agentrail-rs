@@ -93,7 +93,6 @@ pub fn init_saga(path: &Path, name: &str, plan_content: &str) -> Result<()> {
 
     std::fs::create_dir_all(dir.join("steps"))?;
     std::fs::create_dir_all(dir.join("trajectories"))?;
-    std::fs::create_dir_all(dir.join("sessions"))?;
 
     let plan_file = format!("{DIR_NAME}/plan.md");
     let config = SagaConfig {

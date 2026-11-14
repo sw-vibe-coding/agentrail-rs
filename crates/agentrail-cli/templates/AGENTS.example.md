@@ -114,6 +114,16 @@ Treat it like source code.
   reflog cannot restore blobs that were never staged. This has happened
   before and lost saga history.
 
+### Session logs are not part of it
+
+`agentrail complete` keeps a copy of your session log outside the
+repository (`agentrail sessions path`). Never commit a session log or
+copy one into the working tree: it quotes every file you read and every
+command's output, so in a public repository it publishes them, and it
+only grows, so each commit stores it again in full. If agentrail reports
+logs inside the repository, run `agentrail sessions migrate`. If it
+reports an oversize file under `.agentrail/`, do not stage it.
+
 ### Commit order matters
 
 Work → `git add` → `git commit` → `agentrail complete`. In that order.

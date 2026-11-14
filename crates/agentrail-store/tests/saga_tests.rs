@@ -13,7 +13,10 @@ fn init_creates_saga_directory_and_files() {
     assert!(dir.join("saga.toml").is_file());
     assert!(dir.join("steps").is_dir());
     assert!(dir.join("trajectories").is_dir());
-    assert!(dir.join("sessions").is_dir());
+    assert!(
+        !dir.join("sessions").exists(),
+        "session logs live outside the repository"
+    );
 
     let plan = std::fs::read_to_string(tmp.path().join(".agentrail/plan.md")).unwrap();
     assert_eq!(plan, "The plan");

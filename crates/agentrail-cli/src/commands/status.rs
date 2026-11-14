@@ -1,5 +1,5 @@
 use agentrail_core::error::Result;
-use agentrail_store::{instructions, saga, step};
+use agentrail_store::{instructions, saga, session, size_guard, step};
 use std::path::Path;
 
 pub fn run(saga_path: &Path) -> Result<()> {
@@ -45,6 +45,17 @@ pub fn run(saga_path: &Path) -> Result<()> {
 
     // Read-only freshness warning — never auto-applies from `status`.
     if let Ok(Some(msg)) = instructions::freshness_warning(saga_path) {
+        println!();
+        println!("{msg}");
+    }
+
+    for msg in [
+        session::in_repo_warning(saga_path),
+        size_guard::warning(saga_path),
+    ]
+    .into_iter()
+    .flatten()
+    {
         println!();
         println!("{msg}");
     }

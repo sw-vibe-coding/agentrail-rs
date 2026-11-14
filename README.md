@@ -132,8 +132,12 @@ All runtime data lives in `.agentrail/` (append-only):
     summary.md                      What was accomplished
   trajectories/{task_type}/
     run_NNN.json                    Individual ICRL trajectory records
-  sessions/{session-id}.jsonl       Claude Code conversation snapshots
 ```
+
+Session logs (Claude Code conversation snapshots) are kept **outside** the
+repository, in `~/.agentrail/sessions/<repo-key>/`: they quote everything
+the agent read and only grow, so they must never be committed. See
+`agentrail sessions --help`.
 
 ## Key Concepts
 

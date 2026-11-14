@@ -14,5 +14,12 @@ pub fn run(saga_path: &Path, reason: Option<&str>) -> Result<()> {
         config.name, config.status,
     );
 
+    // An older saga may still carry session logs; archiving just moved
+    // them into .agentrail-archive/, where they are as committable as ever.
+    if let Some(msg) = agentrail_store::session::in_repo_warning(saga_path) {
+        println!();
+        println!("{msg}");
+    }
+
     Ok(())
 }
