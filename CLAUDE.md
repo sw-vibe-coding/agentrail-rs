@@ -37,7 +37,7 @@ Cargo workspace (`edition = "2024"`) with five crates under `crates/`:
 
 - **agentrail-core** -- Domain types and error enum. All other crates depend on this. Key types: `SagaConfig`, `StepConfig`, `StepRole`, `Trajectory`, `HandoffPacket`, `JobSpec`. Error type: `agentrail_core::error::Error` with `Result<T>` alias.
 - **agentrail-store** -- File-based persistence against `.agentrail/`. Modules: `saga` (init/load/save), `step` (create/transition/list with NNN-slug dirs), `trajectory` (ICRL record save/retrieve), `session` (Claude Code JSONL snapshot into the out-of-repo session store, plus migration of in-repo logs), `size_guard` (oversize files under `.agentrail/`), `instructions` (briefing renderer + marker apply for shared agent rules).
-- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, rename, sessions, check-size, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
+- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, rename, remap, sessions, check-size, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
 - **agentrail-exec** -- Deterministic step executors (stub; will become trait + shell executor routing to domain repos).
 - **agentrail-validate** -- Output validators (stub; will become trait + shell validator routing to domain repos).
 
@@ -69,7 +69,11 @@ Dependency flow: `cli -> store, exec, validate -> core`
   hands a step to someone else so the cursor skips it. `complete`
   advances to the next open step (never onto a completed or reserved
   one), and `status`/`next` list stranded steps (pending behind the
-  cursor). New step.toml fields `reserved_for` and `done_elsewhere`
+  cursor). After a history rewrite (filter-repo, rebase, squash
+  merge) the recorded hashes dangle: `agentrail remap <commit-map>` or
+  `agentrail remap --from OLD --to NEW` rewrites them in every active and
+  archived step, and bare `agentrail remap` lists the dangling ones
+  (exit 1 if any). New step.toml fields `reserved_for` and `done_elsewhere`
   are optional and omitted when unset, so older files load unchanged.
 - **Parallel lanes (`agentrail rename`)**: two agents on two branches in
   the same repo each write into `.agentrail/steps/`. The `NNN-` number is

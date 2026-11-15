@@ -15,6 +15,7 @@ pub mod insert;
 pub mod instructions;
 pub mod next;
 pub mod plan;
+pub mod remap;
 pub mod rename;
 pub mod reopen;
 pub mod reorder;
