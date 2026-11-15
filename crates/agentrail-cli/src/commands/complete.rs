@@ -1,6 +1,6 @@
 use agentrail_core::error::Result;
 use agentrail_core::{SagaStatus, StepRole, StepStatus, Trajectory};
-use agentrail_store::{git_history, saga, session, size_guard, step, tracking, trajectory};
+use agentrail_store::{digest, git_history, saga, session, size_guard, step, tracking, trajectory};
 use std::path::Path;
 
 pub struct CompleteArgs<'a> {
@@ -27,10 +27,15 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
     // Try to snapshot session (non-fatal, silent when no session exists).
     // The log goes to the session store OUTSIDE the repository: it quotes
     // everything the agent read and must never ride along in a commit.
-    if let Ok((path, lines)) = session::snapshot_session(saga_path)
-        && lines > 0
+    let snapshot = session::snapshot_session(saga_path).ok();
+    if let Some(snap) = &snapshot
+        && snap.new_lines > 0
     {
-        eprintln!("Snapshotted {} new lines to {}", lines, path.display());
+        eprintln!(
+            "Snapshotted {} new lines to {}",
+            snap.new_lines,
+            snap.path.display()
+        );
     }
 
     // Read summary
@@ -69,6 +74,23 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
 
         if !summary_text.is_empty() {
             step::save_summary(&step_dir, &summary_text)?;
+        }
+
+        // Transcript: the committable digest of this step's part of the
+        // session log (prompts and replies only). Non-fatal: a digest
+        // problem must not stop a step from completing.
+        if !config.no_transcript
+            && let Some(snap) = &snapshot
+        {
+            let label = format!("{:03}-{}", step_config.number, step_config.slug);
+            match digest::write_step_transcript(&step_dir, &label, snap, &step_config.commits) {
+                Ok(Some(path)) => println!(
+                    "Wrote {} (prompts and replies only; review it before committing to a public repository).",
+                    path.strip_prefix(saga_path).unwrap_or(&path).display()
+                ),
+                Ok(None) => {}
+                Err(e) => eprintln!("⚠ Could not write the step transcript: {e}"),
+            }
         }
 
         // Record trajectory if step has a task_type and reward is provided

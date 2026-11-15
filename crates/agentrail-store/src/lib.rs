@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod audit;
+pub mod digest;
 pub mod domain;
 pub mod git_history;
 pub mod instructions;

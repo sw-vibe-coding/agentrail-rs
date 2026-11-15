@@ -20,3 +20,13 @@ reports a file over the size limit under `.agentrail/`, do not stage that
 file; use the `git add` line agentrail prints, which leaves it out. Tell
 the user either way: logs already committed stay in history until the
 repository's owner decides to rewrite it.
+
+### The step transcript is committed
+
+What `complete` does write into the repository is
+`steps/NNN-slug/transcript.md`: the user's prompts and your replies for
+that step, with no tool calls, tool results or thinking. Commit it with
+the step. It is small, but it is still your words and the user's: if a
+reply quotes material the repository must not publish, say so before
+committing. `agentrail sessions transcript off` stops writing it for the
+current saga.

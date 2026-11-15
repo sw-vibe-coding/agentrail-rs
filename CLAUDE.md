@@ -159,7 +159,7 @@ All runtime data in `.agentrail/` (never `.avoid-compaction/`):
 ```
 .agentrail/saga.toml
 .agentrail/plan.md
-.agentrail/steps/NNN-slug/{step.toml, prompt.md, summary.md}
+.agentrail/steps/NNN-slug/{step.toml, prompt.md, summary.md, transcript.md}
 .agentrail/skills/{task_type}.toml          (planned)
 .agentrail/experiences/{task_type}/run_NNN.json  (planned)
 .agentrail/trajectories/{task_type}/run_NNN.json (existing, backward compat)
@@ -177,6 +177,13 @@ migrate` moves logs written in-repo by older versions out and untracks
 them; `agentrail check-size` (also run by `next`/`status`/`complete`)
 warns at 10 MiB and fails at 95 MiB for any committable file under
 `.agentrail/` or `.agentrail-archive/`.
+
+What IS committed is `steps/NNN-slug/transcript.md`, written by `complete`
+(`digest` module): the user's prompts and the assistant's replies for the
+lines that step added to the log, with no tool calls, tool results,
+thinking or metadata, plus the step's commits, a token count and the
+SHA-256 of the full log. `agentrail sessions transcript off` sets
+`no_transcript = true` in saga.toml (per saga; omitted when unset).
 
 ## Briefing / clearinghouse (`agentrail instructions`)
 
