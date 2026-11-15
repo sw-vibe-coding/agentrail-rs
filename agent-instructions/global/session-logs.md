@@ -30,3 +30,12 @@ the step. It is small, but it is still your words and the user's: if a
 reply quotes material the repository must not publish, say so before
 committing. `agentrail sessions transcript off` stops writing it for the
 current saga.
+
+### The shadow store
+
+If the project has a private shadow store (`agentrail shadow status` says
+so), run `agentrail shadow push` after committing the saga record: it
+compresses the session logs into that private location and, when it is a
+git repository, commits and pushes them there. Never point a shadow store
+at a public repository, and never set one up on your own initiative —
+where private logs go is the user's decision.

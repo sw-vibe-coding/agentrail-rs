@@ -8,6 +8,7 @@ pub mod remap;
 pub mod rename;
 pub mod saga;
 pub mod session;
+pub mod shadow;
 pub mod size_guard;
 pub mod skill;
 pub mod snapshot;

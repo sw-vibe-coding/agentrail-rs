@@ -36,6 +36,11 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
             snap.new_lines,
             snap.path.display()
         );
+        if let Some(store) = snap.path.parent()
+            && agentrail_store::shadow::configured_target(store).is_some()
+        {
+            eprintln!("A shadow store is set: `agentrail shadow push` keeps its copy current.");
+        }
     }
 
     // Read summary

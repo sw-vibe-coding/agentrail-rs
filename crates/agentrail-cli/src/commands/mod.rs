@@ -23,6 +23,7 @@ pub mod reserve;
 pub mod run_loop;
 pub mod sessions;
 pub mod setup;
+pub mod shadow;
 pub mod snapshot;
 pub mod status;
 pub mod view;
