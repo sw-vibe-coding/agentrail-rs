@@ -23,9 +23,9 @@ flag — but only after the damage is done.
 
 Three categories of files live here, and the rules differ:
 
-- **Append-only saga state** — `saga.toml`, `step.toml`, `plan.md`, session
-  JSONLs under `sessions/`, trajectory JSONs under `trajectories/`, and
-  anything under `.agentrail-archive/`. **Never hand-edit or delete these.**
+- **Append-only saga state** — `saga.toml`, `step.toml`, `plan.md`,
+  trajectory JSONs under `trajectories/`, and anything under
+  `.agentrail-archive/`. **Never hand-edit or delete these.**
   They are written by agentrail commands and represent the durable saga
   record; hand-editing desyncs the saga from git history and from prior
   session memory. A direct `rm` on untracked files is unrecoverable.

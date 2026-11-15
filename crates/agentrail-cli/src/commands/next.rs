@@ -1,6 +1,8 @@
 use agentrail_core::error::{Error, Result};
 use agentrail_core::{SagaStatus, StepStatus};
-use agentrail_store::{domain, instructions, saga, skill, step, tracking, trajectory};
+use agentrail_store::{
+    domain, instructions, saga, session, size_guard, skill, step, tracking, trajectory,
+};
 use std::path::Path;
 
 pub struct NextArgs {
@@ -41,6 +43,19 @@ pub fn run(saga_path: &Path, args: &NextArgs) -> Result<u8> {
     // or (worst case) gitignored. Saga state that's not committed is the
     // most common data-loss footgun — surface it before any work starts.
     if let Some(msg) = tracking::warning(saga_path) {
+        eprintln!("{msg}");
+        eprintln!();
+    }
+
+    // Session logs inside the repository, and files too large for the
+    // saga record: both get committed by the routine `git add .agentrail/`.
+    for msg in [
+        session::in_repo_warning(saga_path),
+        size_guard::warning(saga_path),
+    ]
+    .into_iter()
+    .flatten()
+    {
         eprintln!("{msg}");
         eprintln!();
     }

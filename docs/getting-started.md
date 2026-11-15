@@ -55,7 +55,8 @@ agentrail setup --name my-project --plan "Build a web app with user auth"
 ```
 
 This creates:
-- `.agentrail/` directory with saga, steps, trajectories, sessions
+- `.agentrail/` directory with saga, steps, trajectories (session logs are kept
+  outside the repository, in `~/.agentrail/sessions/`)
 - `CLAUDE.md` with the AgentRail session protocol (tells Claude how
   to use agentrail commands)
 

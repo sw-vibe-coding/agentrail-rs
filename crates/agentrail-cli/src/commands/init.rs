@@ -25,9 +25,13 @@ pub fn run(saga_path: &Path, name: &str, plan_raw: &str, retroactive: bool) -> R
     println!("  {}/plan.md", dir.display());
     println!("  {}/steps/", dir.display());
     println!("  {}/trajectories/", dir.display());
-    println!("  {}/sessions/", dir.display());
     println!();
     println!("The .agentrail/ directory is an append-only store.");
     println!("Do not manually edit files inside it.");
+    if let Ok(store) = agentrail_store::session::session_store_dir(saga_path) {
+        println!();
+        println!("Session logs are kept outside the repository, in:");
+        println!("  {}", store.display());
+    }
     Ok(())
 }

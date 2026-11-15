@@ -481,12 +481,65 @@ saga.toml; archiving makes the merge fully conflict-free.")]
     /// `instruction-profile.toml` is user config (like `.gitconfig`).
     /// Hand-edit it freely, or use `agentrail instructions profile *` to
     /// mutate via commands — both are valid. The agentrail-managed files
-    /// in `.agentrail/` are `saga.toml` / `step.toml` / session JSONLs /
-    /// trajectory JSONs (don't hand-edit those).
+    /// in `.agentrail/` are `saga.toml` / `step.toml` / trajectory JSONs
+    /// (don't hand-edit those).
     Instructions {
         #[command(subcommand)]
         action: InstructionsAction,
     },
+    /// Session logs: where they are kept, and moving old ones out of the repository
+    ///
+    /// `agentrail complete` copies the agent's session log (the Claude
+    /// Code JSONL) so it outlives the agent's own retention. The copy is
+    /// kept OUTSIDE the repository, in
+    /// `~/.agentrail/sessions/<repo-path-key>/` (override the root with
+    /// `AGENTRAIL_SESSIONS_DIR`), for two reasons:
+    ///
+    ///   - Size. A log only grows, so committing it at every step stores
+    ///     the whole log again each time; one long session passes
+    ///     GitHub's 100 MiB file limit and the push is refused.
+    ///   - Privacy. A log quotes every file the agent read and every
+    ///     command's output. Committed to a public repository, it
+    ///     publishes all of it — licensed files and secrets included.
+    ///
+    /// Older agentrail versions wrote the logs to `.agentrail/sessions/`,
+    /// where the routine `git add .agentrail/` committed them.
+    /// `agentrail sessions migrate` fixes such a repository.
+    Sessions {
+        #[command(subcommand)]
+        action: SessionsAction,
+    },
+    /// Check .agentrail/ for files too large to commit (exit 1 if any)
+    ///
+    /// Scans `.agentrail/` and `.agentrail-archive/` for files git could
+    /// commit (tracked, or untracked and not ignored). Files of 10 MiB or
+    /// more are reported as warnings; a file of 95 MiB or more is an
+    /// error and the command exits 1, since GitHub rejects 100 MiB and
+    /// the saga record is committed at every step. `next`, `status` and
+    /// `complete` print the same report.
+    ///
+    /// As a pre-commit hook (`.git/hooks/pre-commit`):
+    ///   agentrail check-size --staged
+    CheckSize {
+        /// Check only what is staged in the index
+        #[arg(long)]
+        staged: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum SessionsAction {
+    /// Print the directory this repository's session logs are kept in
+    Path,
+    /// Move session logs out of the repository and stop tracking them
+    ///
+    /// Moves every file under `.agentrail/sessions/` and
+    /// `.agentrail-archive/*/sessions/` into the session store and, if
+    /// git tracks them, stages their removal (`git rm --cached`) for you
+    /// to commit. Nothing is deleted without a copy at least as long in
+    /// the store. Idempotent. It does not rewrite history: commits
+    /// already made still contain the logs.
+    Migrate,
 }
 
 #[derive(Subcommand)]
@@ -820,5 +873,13 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             };
             commands::instructions::run(saga_path, act)
         }
+        Commands::Sessions { action } => {
+            let act = match action {
+                SessionsAction::Path => commands::sessions::Action::Path,
+                SessionsAction::Migrate => commands::sessions::Action::Migrate,
+            };
+            commands::sessions::run(saga_path, act).map(|_| 0)
+        }
+        Commands::CheckSize { staged } => commands::check_size::run(saga_path, staged),
     }
 }

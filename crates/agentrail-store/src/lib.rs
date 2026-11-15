@@ -6,6 +6,7 @@ pub mod instructions;
 pub mod rename;
 pub mod saga;
 pub mod session;
+pub mod size_guard;
 pub mod skill;
 pub mod snapshot;
 pub mod step;

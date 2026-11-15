@@ -36,8 +36,8 @@ curated experiences, executor implementations, validators. See
 Cargo workspace (`edition = "2024"`) with five crates under `crates/`:
 
 - **agentrail-core** -- Domain types and error enum. All other crates depend on this. Key types: `SagaConfig`, `StepConfig`, `StepRole`, `Trajectory`, `HandoffPacket`, `JobSpec`. Error type: `agentrail_core::error::Error` with `Result<T>` alias.
-- **agentrail-store** -- File-based persistence against `.agentrail/`. Modules: `saga` (init/load/save), `step` (create/transition/list with NNN-slug dirs), `trajectory` (ICRL record save/retrieve), `session` (Claude Code JSONL snapshot), `instructions` (briefing renderer + marker apply for shared agent rules).
-- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, rename, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
+- **agentrail-store** -- File-based persistence against `.agentrail/`. Modules: `saga` (init/load/save), `step` (create/transition/list with NNN-slug dirs), `trajectory` (ICRL record save/retrieve), `session` (Claude Code JSONL snapshot into the out-of-repo session store, plus migration of in-repo logs), `size_guard` (oversize files under `.agentrail/`), `instructions` (briefing renderer + marker apply for shared agent rules).
+- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, rename, sessions, check-size, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
 - **agentrail-exec** -- Deterministic step executors (stub; will become trait + shell executor routing to domain repos).
 - **agentrail-validate** -- Output validators (stub; will become trait + shell validator routing to domain repos).
 
@@ -164,10 +164,19 @@ All runtime data in `.agentrail/` (never `.avoid-compaction/`):
 .agentrail/experiences/{task_type}/run_NNN.json  (planned)
 .agentrail/trajectories/{task_type}/run_NNN.json (existing, backward compat)
 .agentrail/domains.toml                     (planned)
-.agentrail/sessions/{session-id}.jsonl
 .agentrail/instruction-profile.toml         (optional, briefing config)
 .agentrail/instruction-lock.toml            (briefing apply record)
 ```
+
+Session logs are NOT in the repository. `agentrail complete` snapshots the
+Claude Code JSONL to `~/.agentrail/sessions/<repo-key>/{session-id}.jsonl`
+(root overridable with `AGENTRAIL_SESSIONS_DIR`). A log quotes every file
+read and only grows, so committing it per step both publishes private
+content and stores the whole log again each time. `agentrail sessions
+migrate` moves logs written in-repo by older versions out and untracks
+them; `agentrail check-size` (also run by `next`/`status`/`complete`)
+warns at 10 MiB and fails at 95 MiB for any committable file under
+`.agentrail/` or `.agentrail-archive/`.
 
 ## Briefing / clearinghouse (`agentrail instructions`)
 

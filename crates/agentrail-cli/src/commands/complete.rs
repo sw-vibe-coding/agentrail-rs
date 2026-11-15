@@ -1,6 +1,6 @@
 use agentrail_core::error::Result;
 use agentrail_core::{SagaStatus, StepRole, StepStatus, Trajectory};
-use agentrail_store::{git_history, saga, session, step, tracking, trajectory};
+use agentrail_store::{git_history, saga, session, size_guard, step, tracking, trajectory};
 use std::path::Path;
 
 pub struct CompleteArgs<'a> {
@@ -24,8 +24,10 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
     let mut config = saga::load_saga(saga_path)?;
     let saga_dir = saga::saga_dir(saga_path);
 
-    // Try to snapshot session (non-fatal, silent when no session exists)
-    if let Ok((path, lines)) = session::snapshot_session(&saga_dir, saga_path)
+    // Try to snapshot session (non-fatal, silent when no session exists).
+    // The log goes to the session store OUTSIDE the repository: it quotes
+    // everything the agent read and must never ride along in a commit.
+    if let Ok((path, lines)) = session::snapshot_session(saga_path)
         && lines > 0
     {
         eprintln!("Snapshotted {} new lines to {}", lines, path.display());
@@ -111,6 +113,7 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         config.status = SagaStatus::Completed;
         saga::save_saga(saga_path, &config)?;
         println!("Saga '{}' marked as complete.", config.name);
+        print_guards(saga_path);
         return Ok(());
     }
 
@@ -205,8 +208,22 @@ pub fn run(saga_path: &Path, args: &CompleteArgs<'_>) -> Result<()> {
         println!();
         println!("{reminder}");
     }
+    print_guards(saga_path);
 
     Ok(())
+}
+
+/// Things that must not be committed with the saga record: session logs
+/// still inside the repository, and files too large for it.
+fn print_guards(saga_path: &Path) {
+    if let Some(msg) = session::in_repo_warning(saga_path) {
+        println!();
+        println!("{msg}");
+    }
+    if let Some(msg) = size_guard::warning(saga_path) {
+        println!();
+        println!("{msg}");
+    }
 }
 
 fn parse_role(s: &str) -> StepRole {

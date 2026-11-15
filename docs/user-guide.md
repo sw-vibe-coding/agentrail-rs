@@ -46,7 +46,8 @@ agentrail init --name my-project --plan "Build feature X. Phase 1: scaffold. Pha
 ```
 
 This creates `.agentrail/` with `saga.toml`, `plan.md`, and empty
-`steps/`, `trajectories/`, `sessions/` directories.
+`steps/` and `trajectories/` directories. Session logs are kept outside the
+repository, in `~/.agentrail/sessions/<repo-key>/`.
 
 ### 2. Register a domain (optional)
 

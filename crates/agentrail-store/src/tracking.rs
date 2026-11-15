@@ -131,9 +131,10 @@ pub fn warning(repo_path: &Path) -> Option<String> {
             report.staged.len()
         ));
     }
-    msg.push_str(
-        "  Track and commit `.agentrail/` files at every step boundary — they ARE the saga record.\n  Quick fix:  git add .agentrail/ .agentrail-archive/ && git commit -m \"saga: <summary>\"",
-    );
+    msg.push_str(&format!(
+        "  Track and commit `.agentrail/` files at every step boundary — they ARE the saga record.\n  Quick fix:  {} && git commit -m \"saga: <summary>\"",
+        crate::size_guard::git_add_line(repo_path)
+    ));
     Some(msg)
 }
 
@@ -156,9 +157,10 @@ pub fn complete_reminder(repo_path: &Path) -> Option<String> {
             "\n  ⚠ .agentrail/ is gitignored — fix this FIRST or the saga record will be lost.",
         );
     }
-    msg.push_str(
-        "\n  Commit them now so the next session sees this step:\n    git add .agentrail/ .agentrail-archive/\n    git commit -m \"step <slug>: <summary>\"\n  Without this, `agentrail next` in a future session will run on stale state.",
-    );
+    msg.push_str(&format!(
+        "\n  Commit them now so the next session sees this step:\n    {}\n    git commit -m \"step <slug>: <summary>\"\n  Without this, `agentrail next` in a future session will run on stale state.",
+        crate::size_guard::git_add_line(repo_path)
+    ));
     Some(msg)
 }
 
