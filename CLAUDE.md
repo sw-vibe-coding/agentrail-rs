@@ -37,7 +37,7 @@ Cargo workspace (`edition = "2024"`) with five crates under `crates/`:
 
 - **agentrail-core** -- Domain types and error enum. All other crates depend on this. Key types: `SagaConfig`, `StepConfig`, `StepRole`, `Trajectory`, `HandoffPacket`, `JobSpec`. Error type: `agentrail_core::error::Error` with `Result<T>` alias.
 - **agentrail-store** -- File-based persistence against `.agentrail/`. Modules: `saga` (init/load/save), `step` (create/transition/list with NNN-slug dirs), `trajectory` (ICRL record save/retrieve), `session` (Claude Code JSONL snapshot into the out-of-repo session store, plus migration of in-repo logs), `size_guard` (oversize files under `.agentrail/`), `instructions` (briefing renderer + marker apply for shared agent rules).
-- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, rename, remap, sessions, check-size, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
+- **agentrail-cli** -- Binary crate (`agentrail`). Commands include init, status, next, begin, complete, plan, history, abort, insert, reorder, reopen, audit, snapshot, archive, rename, remap, sessions, shadow, check-size, gen-agents-doc, and `instructions` (status/apply/diff/show/list). Has `lib.rs` exporting `commands` module for testability.
 - **agentrail-exec** -- Deterministic step executors (stub; will become trait + shell executor routing to domain repos).
 - **agentrail-validate** -- Output validators (stub; will become trait + shell validator routing to domain repos).
 
@@ -188,6 +188,15 @@ lines that step added to the log, with no tool calls, tool results,
 thinking or metadata, plus the step's commits, a token count and the
 SHA-256 of the full log. `agentrail sessions transcript off` sets
 `no_transcript = true` in saga.toml (per saga; omitted when unset).
+
+`agentrail shadow set <dir>` / `push` / `pull` / `status` (`shadow` module)
+keep the logs in a private shadow store: a directory, usually a clone of a
+private git repo. `push` writes `sessions/<id>.jsonl.xz` plus a
+`.jsonl.sha256` sidecar there and commits + pushes if it is a git repo;
+`pull` restores, verifies the hash, and never replaces a local log at
+least as long. The target is machine-local (stored as `shadow.toml`
+beside the logs in the session store, or `AGENTRAIL_SHADOW`), never in
+`.agentrail/`. Needs the `xz` program; tests that use it skip when absent.
 
 ## Briefing / clearinghouse (`agentrail instructions`)
 

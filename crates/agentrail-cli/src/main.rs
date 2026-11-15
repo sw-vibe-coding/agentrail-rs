@@ -525,6 +525,37 @@ saga.toml; archiving makes the merge fully conflict-free.")]
         #[arg(long)]
         staged: bool,
     },
+    /// Keep session logs in a private shadow store (push, pull, status)
+    ///
+    /// Session logs live outside the repository, on one machine
+    /// (`agentrail sessions path`). The shadow store is where they are
+    /// kept and shared privately: a directory, usually a clone of a
+    /// PRIVATE git repository.
+    ///
+    /// `push` writes each log there as `sessions/<id>.jsonl.xz` with a
+    /// `sessions/<id>.jsonl.sha256` beside it and, if the directory is a
+    /// git repository, commits and pushes. `pull` restores them, checks
+    /// each against its hash, and never replaces a local log that is at
+    /// least as long. Logs compress about 7x.
+    ///
+    /// The target is machine-local: `shadow set` stores it beside the
+    /// logs, not in `.agentrail/`, so it survives `agentrail archive`
+    /// and the private repository's name never lands in a public one.
+    /// `AGENTRAIL_SHADOW=<dir>` overrides it. Needs the `xz` program.
+    #[command(after_long_help = "\
+EXAMPLE:
+  gh repo create my-project-agentrail --private --clone   # once
+  agentrail shadow set ../my-project-agentrail            # once per machine
+  agentrail shadow push                                   # after committing the saga record
+  agentrail shadow status                                 # exit 1 if anything is unpushed
+  agentrail shadow pull                                   # on another machine
+
+Each step's transcript.md records the SHA-256 of the log as it stood when
+the step completed, so a transcript can be matched to its log.")]
+    Shadow {
+        #[command(subcommand)]
+        action: ShadowAction,
+    },
     /// Repair recorded commit hashes after git history was rewritten
     ///
     /// Steps record full commit hashes. `git filter-repo`, a rebase
@@ -563,6 +594,31 @@ copy before running filter-repo again: each run overwrites it.")]
         /// Print what would change without writing anything
         #[arg(long)]
         dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ShadowAction {
+    /// Set this repository's shadow store (an existing directory)
+    Set {
+        /// Directory, or clone of a private git repository
+        dir: String,
+    },
+    /// Forget the shadow store (changes nothing in it)
+    Unset,
+    /// Compare the local logs with the shadow store (exit 1 if any are unpushed)
+    Status,
+    /// Compress the logs into the shadow store; commit and push if it is a git repository
+    Push {
+        /// Commit in the shadow repository but do not `git push`
+        #[arg(long)]
+        no_git_push: bool,
+    },
+    /// Restore logs from the shadow store into the local session store
+    Pull {
+        /// Do not `git pull` the shadow repository first
+        #[arg(long)]
+        no_git_pull: bool,
     },
 }
 
@@ -940,6 +996,20 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             commands::sessions::run(saga_path, act).map(|_| 0)
         }
         Commands::CheckSize { staged } => commands::check_size::run(saga_path, staged),
+        Commands::Shadow { action } => {
+            let act = match action {
+                ShadowAction::Set { dir } => commands::shadow::Action::Set(dir),
+                ShadowAction::Unset => commands::shadow::Action::Unset,
+                ShadowAction::Status => commands::shadow::Action::Status,
+                ShadowAction::Push { no_git_push } => {
+                    commands::shadow::Action::Push { no_git_push }
+                }
+                ShadowAction::Pull { no_git_pull } => {
+                    commands::shadow::Action::Pull { no_git_pull }
+                }
+            };
+            commands::shadow::run(saga_path, act)
+        }
         Commands::Remap {
             commit_map,
             from,
