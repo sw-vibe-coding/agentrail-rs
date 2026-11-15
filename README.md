@@ -138,7 +138,8 @@ All runtime data lives in `.agentrail/` (append-only):
 Session logs (Claude Code conversation snapshots) are kept **outside** the
 repository, in `~/.agentrail/sessions/<repo-key>/`: they quote everything
 the agent read and only grow, so they must never be committed. See
-`agentrail sessions --help`.
+`agentrail sessions --help`. To move a repository that already has logs in
+its history, see [Moving a repository off in-repo session logs](docs/migrating-session-logs.md).
 
 ## Key Concepts
 
