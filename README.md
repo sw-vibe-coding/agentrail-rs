@@ -130,6 +130,7 @@ All runtime data lives in `.agentrail/` (append-only):
     step.toml                       Step config (role, status, job spec, packet file)
     prompt.md                       Instructions for this step
     summary.md                      What was accomplished
+    transcript.md                   Prompts and replies for the step (no tool output)
   trajectories/{task_type}/
     run_NNN.json                    Individual ICRL trajectory records
 ```

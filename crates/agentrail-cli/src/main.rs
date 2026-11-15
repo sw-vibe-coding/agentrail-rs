@@ -540,6 +540,23 @@ enum SessionsAction {
     /// the store. Idempotent. It does not rewrite history: commits
     /// already made still contain the logs.
     Migrate,
+    /// Turn the per-step transcript on or off for this saga (default: on)
+    ///
+    /// `agentrail complete` writes `steps/NNN-slug/transcript.md`: the
+    /// user's prompts and the assistant's replies for that step, with no
+    /// tool calls, tool results, thinking or metadata, plus the step's
+    /// commits, a token count and the SHA-256 of the full log. It is
+    /// about 1% of the log's size and is committed with the step.
+    ///
+    /// It still contains whatever the user typed and the assistant wrote
+    /// back, which can quote private material. Turn it off for a saga
+    /// where that must not be published; the setting is stored in
+    /// saga.toml and applies to this saga only.
+    Transcript {
+        /// `on` or `off`
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -877,6 +894,9 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             let act = match action {
                 SessionsAction::Path => commands::sessions::Action::Path,
                 SessionsAction::Migrate => commands::sessions::Action::Migrate,
+                SessionsAction::Transcript { state } => {
+                    commands::sessions::Action::Transcript(state == "on")
+                }
             };
             commands::sessions::run(saga_path, act).map(|_| 0)
         }

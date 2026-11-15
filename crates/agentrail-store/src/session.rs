@@ -171,15 +171,27 @@ pub fn session_store_dir(cwd: &Path) -> Result<PathBuf> {
     Ok(session_store_root()?.join(projects_dir_name(cwd)))
 }
 
+/// What one snapshot added to the store copy of a session log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Snapshot {
+    /// The store copy of the log.
+    pub path: PathBuf,
+    /// Lines the store copy held before this snapshot (0-based index of
+    /// the first line added).
+    pub first_new_line: usize,
+    /// Lines this snapshot appended.
+    pub new_lines: usize,
+}
+
 /// Snapshot the latest session JSONL into the repository's session store
 /// (outside the repository; see [`session_store_root`]).
-pub fn snapshot_session(cwd: &Path) -> Result<(PathBuf, usize)> {
+pub fn snapshot_session(cwd: &Path) -> Result<Snapshot> {
     let projects_dir = claude_projects_dir(cwd)?;
     snapshot_session_into(&projects_dir, &session_store_dir(cwd)?)
 }
 
 /// Snapshot the latest session JSONL in `projects_dir` into `store_dir`.
-pub fn snapshot_session_into(projects_dir: &Path, store_dir: &Path) -> Result<(PathBuf, usize)> {
+pub fn snapshot_session_into(projects_dir: &Path, store_dir: &Path) -> Result<Snapshot> {
     let session_files = find_session_files(projects_dir)?;
 
     let latest = session_files.last().ok_or_else(|| {
@@ -198,12 +210,17 @@ pub fn snapshot_session_into(projects_dir: &Path, store_dir: &Path) -> Result<(P
         .to_string();
 
     let snapshot_path = store_dir.join(format!("{session_name}.jsonl"));
-    let new_lines = append_new_lines(latest, &snapshot_path)?;
+    let (first_new_line, new_lines) = append_new_lines(latest, &snapshot_path)?;
 
-    Ok((snapshot_path, new_lines))
+    Ok(Snapshot {
+        path: snapshot_path,
+        first_new_line,
+        new_lines,
+    })
 }
 
-fn append_new_lines(source: &Path, snapshot: &Path) -> Result<usize> {
+/// Returns (lines already in the snapshot, lines appended).
+fn append_new_lines(source: &Path, snapshot: &Path) -> Result<(usize, usize)> {
     let source_content = std::fs::read_to_string(source)?;
     let source_lines: Vec<&str> = source_content.lines().collect();
 
@@ -229,7 +246,7 @@ fn append_new_lines(source: &Path, snapshot: &Path) -> Result<usize> {
         file.write_all(new_content.as_bytes())?;
     }
 
-    Ok(new_lines)
+    Ok((existing_lines, new_lines))
 }
 
 /// Session logs still inside the repository: files under
@@ -439,13 +456,14 @@ mod tests {
         let log = projects.path().join("abc.jsonl");
         std::fs::write(&log, "{\"a\":1}\n{\"a\":2}\n").unwrap();
 
-        let (path, new) = snapshot_session_into(projects.path(), &store_dir).unwrap();
+        let snap = snapshot_session_into(projects.path(), &store_dir).unwrap();
+        let path = snap.path.clone();
         assert_eq!(path, store_dir.join("abc.jsonl"));
-        assert_eq!(new, 2);
+        assert_eq!((snap.first_new_line, snap.new_lines), (0, 2));
 
         std::fs::write(&log, "{\"a\":1}\n{\"a\":2}\n{\"a\":3}\n").unwrap();
-        let (_, new) = snapshot_session_into(projects.path(), &store_dir).unwrap();
-        assert_eq!(new, 1);
+        let snap = snapshot_session_into(projects.path(), &store_dir).unwrap();
+        assert_eq!((snap.first_new_line, snap.new_lines), (2, 1));
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
             "{\"a\":1}\n{\"a\":2}\n{\"a\":3}\n"

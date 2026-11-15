@@ -13,5 +13,6 @@ toml = { workspace = true }
 dirs = { workspace = true }
 chrono = { workspace = true }
 tempfile = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]

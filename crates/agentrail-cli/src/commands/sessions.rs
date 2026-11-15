@@ -1,5 +1,5 @@
 use agentrail_core::error::Result;
-use agentrail_store::session;
+use agentrail_store::{saga, session};
 use std::path::Path;
 
 pub enum Action {
@@ -7,6 +7,8 @@ pub enum Action {
     Path,
     /// Move in-repo session logs to the store and untrack them.
     Migrate,
+    /// Turn the per-step transcript on or off for this saga.
+    Transcript(bool),
 }
 
 pub fn run(saga_path: &Path, action: Action) -> Result<()> {
@@ -17,6 +19,7 @@ pub fn run(saga_path: &Path, action: Action) -> Result<()> {
             Ok(())
         }
         Action::Migrate => migrate(saga_path, &store),
+        Action::Transcript(on) => transcript(saga_path, on),
     }
 }
 
@@ -49,6 +52,19 @@ fn migrate(saga_path: &Path, store: &Path) -> Result<()> {
         println!("logs made it large, removing them from history takes a rewrite");
         println!("(e.g. `git filter-repo --invert-paths --path .agentrail/sessions/`)");
         println!("and a force-push — a decision for the repository's owner, not a routine step.");
+    }
+    Ok(())
+}
+
+fn transcript(saga_path: &Path, on: bool) -> Result<()> {
+    let mut config = saga::load_saga(saga_path)?;
+    config.no_transcript = !on;
+    saga::save_saga(saga_path, &config)?;
+    if on {
+        println!("Transcripts on: `agentrail complete` writes steps/NNN-slug/transcript.md.");
+    } else {
+        println!("Transcripts off for saga '{}'.", config.name);
+        println!("Existing transcript.md files are left as they are.");
     }
     Ok(())
 }

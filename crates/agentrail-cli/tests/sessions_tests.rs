@@ -175,3 +175,94 @@ fn briefing_carries_the_privacy_rule_and_no_longer_commits_logs() {
     assert!(body.contains("quotes every file you read"));
     assert!(!body.contains("JSONLs under `sessions/`"));
 }
+
+#[test]
+fn complete_writes_a_transcript_of_just_this_step() {
+    let repo = tempdir().unwrap();
+    let home = tempdir().unwrap();
+    let store = tempdir().unwrap();
+    init_git(repo.path());
+    let run = |args: &[&str]| {
+        let out = agentrail(repo.path(), home.path(), store.path(), args);
+        assert!(out.status.success(), "{args:?}: {}", text(&out));
+        text(&out)
+    };
+
+    let projects = home
+        .path()
+        .join(".claude/projects")
+        .join(agentrail_store::session::projects_dir_name(repo.path()));
+    std::fs::create_dir_all(&projects).unwrap();
+    let log = projects.join("sess-1.jsonl");
+    let append = |lines: &[&str]| {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)
+            .unwrap();
+        for l in lines {
+            writeln!(f, "{l}").unwrap();
+        }
+    };
+
+    run(&["init", "--name", "s", "--plan", "p"]);
+    append(&[r#"{"type":"user","timestamp":"T0","message":{"content":"planning chatter"}}"#]);
+    run(&[
+        "complete",
+        "--summary",
+        "planned",
+        "--next-slug",
+        "one",
+        "--next-prompt",
+        "do one",
+    ]);
+
+    append(&[
+        r#"{"type":"user","timestamp":"T1","message":{"content":"please do step one"}}"#,
+        r#"{"type":"assistant","timestamp":"T2","message":{"id":"m1","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/private/thing"}}],"usage":{"input_tokens":3,"output_tokens":40}}}"#,
+        r#"{"type":"user","timestamp":"T3","toolUseResult":"PRIVATE BODY","message":{"content":[{"type":"tool_result","content":"PRIVATE BODY"}]}}"#,
+        r#"{"type":"assistant","timestamp":"T4","message":{"id":"m2","content":[{"type":"text","text":"Step one is done."}],"usage":{"input_tokens":5,"output_tokens":9}}}"#,
+    ]);
+    let out = run(&[
+        "complete",
+        "--summary",
+        "did one",
+        "--next-slug",
+        "two",
+        "--next-prompt",
+        "do two",
+    ]);
+    assert!(out.contains("transcript.md"), "{out}");
+
+    let transcript =
+        std::fs::read_to_string(repo.path().join(".agentrail/steps/001-one/transcript.md"))
+            .unwrap();
+    assert!(transcript.contains("# Transcript: step 001-one"));
+    assert!(transcript.contains("please do step one"));
+    assert!(transcript.contains("Step one is done."));
+    assert!(transcript.contains("- log lines: 2–5 (4 lines)"));
+    assert!(transcript.contains("8 input, 49 output"));
+    // Not the earlier step's conversation, and nothing the agent read.
+    assert!(!transcript.contains("planning chatter"));
+    assert!(!transcript.contains("PRIVATE"));
+    assert!(!transcript.contains("/private/thing"));
+    // The recorded hash is the store copy's.
+    let key = agentrail_store::session::projects_dir_name(repo.path());
+    let sha =
+        agentrail_store::digest::sha256_file(&store.path().join(key).join("sess-1.jsonl")).unwrap();
+    assert!(transcript.contains(&sha));
+
+    // Opting out: no transcript for the next step.
+    run(&["sessions", "transcript", "off"]);
+    append(&[r#"{"type":"user","timestamp":"T5","message":{"content":"now step two"}}"#]);
+    run(&["complete", "--summary", "did two", "--done"]);
+    assert!(
+        !repo
+            .path()
+            .join(".agentrail/steps/002-two/transcript.md")
+            .exists()
+    );
+    let saga = std::fs::read_to_string(repo.path().join(".agentrail/saga.toml")).unwrap();
+    assert!(saga.contains("no_transcript = true"));
+}

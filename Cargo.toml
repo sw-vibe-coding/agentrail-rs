@@ -23,3 +23,4 @@ thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
 tempfile = "3"
+sha2 = "0.10"

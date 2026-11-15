@@ -18,6 +18,11 @@ pub struct SagaConfig {
     /// skips commits claimed by retroactive sagas when looking for gaps.
     #[serde(default)]
     pub retroactive: bool,
+    /// Opt out of the per-step `transcript.md` that `agentrail complete`
+    /// writes (the user's prompts and the assistant's replies). Omitted
+    /// from saga.toml when false, so older files load unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_transcript: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
