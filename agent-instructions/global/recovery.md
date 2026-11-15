@@ -38,6 +38,22 @@ agentrail audit --since HEAD~50    # limit scope
 The emitted script is a draft — slugs and prompts come from commit
 subjects and usually need rewording. Review and edit before executing.
 
+### `agentrail remap` (after a history rewrite)
+
+Steps record full commit hashes. `git filter-repo`, a rebase before merge
+or a squash merge gives the same work new hashes and leaves the recorded
+ones dangling. Repair them with a command, never by editing step.toml:
+
+```bash
+agentrail remap                                # list dangling commits (exit 1 if any)
+agentrail remap .git/filter-repo/commit-map    # after git filter-repo
+agentrail remap --from OLD_HASH --to NEW_REF   # after a squash or rebase
+```
+
+It rewrites active and archived steps; `--dry-run` previews. Rewriting
+history itself is the user's decision, not yours: never run filter-repo
+or force-push on your own initiative.
+
 ### `agentrail snapshot` (belt-and-suspenders)
 
 Captures `.agentrail/` (and `.agentrail-archive/` if present) into a real

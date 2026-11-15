@@ -525,6 +525,45 @@ saga.toml; archiving makes the merge fully conflict-free.")]
         #[arg(long)]
         staged: bool,
     },
+    /// Repair recorded commit hashes after git history was rewritten
+    ///
+    /// Steps record full commit hashes. `git filter-repo`, a rebase
+    /// before merge, or a squash merge gives the same work new hashes
+    /// and leaves the recorded ones dangling. `remap` rewrites them in
+    /// every step.toml, in `.agentrail/` and `.agentrail-archive/`
+    /// (and in the header of each step's transcript.md).
+    ///
+    /// With no mapping it only checks: it lists recorded commits that
+    /// are not in this repository and exits 1 if there are any.
+    ///
+    /// A commit the rewrite dropped (an all-zero new hash in the commit
+    /// map) keeps its old hash and is reported. Several old commits
+    /// mapping to one new commit collapse to one entry. Re-running is
+    /// harmless: once rewritten, the old hashes no longer match.
+    #[command(after_long_help = "\
+EXAMPLES:
+  agentrail remap                                   # check for dangling commits
+  agentrail remap .git/filter-repo/commit-map --dry-run
+  agentrail remap .git/filter-repo/commit-map       # after git filter-repo
+  agentrail remap --from 3f2a91c --to HEAD          # after a squash merge
+  agentrail remap --from 3f2a91c --to a1b2c3d --from 77e0d4b --to a1b2c3d
+  git add -A .agentrail/ .agentrail-archive/ && git commit -m \"saga: remap commits\"
+
+git filter-repo writes the commit map to .git/filter-repo/commit-map. Keep a
+copy before running filter-repo again: each run overwrites it.")]
+    Remap {
+        /// git filter-repo commit-map file (`old new` hash pairs)
+        commit_map: Option<String>,
+        /// Old commit hash (7+ hex digits); pair each with a --to
+        #[arg(long)]
+        from: Vec<String>,
+        /// New commit (any git revision in this repository) for the matching --from
+        #[arg(long)]
+        to: Vec<String>,
+        /// Print what would change without writing anything
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -901,5 +940,19 @@ fn dispatch(saga_path: &std::path::Path, command: Commands) -> agentrail_core::e
             commands::sessions::run(saga_path, act).map(|_| 0)
         }
         Commands::CheckSize { staged } => commands::check_size::run(saga_path, staged),
+        Commands::Remap {
+            commit_map,
+            from,
+            to,
+            dry_run,
+        } => commands::remap::run(
+            saga_path,
+            &commands::remap::RemapArgs {
+                commit_map: commit_map.as_deref(),
+                from: &from,
+                to: &to,
+                dry_run,
+            },
+        ),
     }
 }

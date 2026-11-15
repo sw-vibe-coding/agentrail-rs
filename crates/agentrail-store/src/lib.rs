@@ -4,6 +4,7 @@ pub mod digest;
 pub mod domain;
 pub mod git_history;
 pub mod instructions;
+pub mod remap;
 pub mod rename;
 pub mod saga;
 pub mod session;
